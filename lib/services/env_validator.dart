@@ -32,15 +32,19 @@ class EnvValidator {
     final stripePublishableKey = dotenv.env['STRIPE_PUBLISHABLE_KEY']?.trim();
     final stripeSecretKey = dotenv.env['STRIPE_SECRET_KEY']?.trim();
     if (stripePublishableKey == null || stripePublishableKey.isEmpty) {
-      issues.add('STRIPE_PUBLISHABLE_KEY is not set (payment features will not work)');
+      issues.add(
+          'STRIPE_PUBLISHABLE_KEY is not set (payment features will not work)');
     } else if (!stripePublishableKey.startsWith('pk_')) {
-      issues.add('STRIPE_PUBLISHABLE_KEY appears to be invalid (should start with pk_)');
+      issues.add(
+          'STRIPE_PUBLISHABLE_KEY appears to be invalid (should start with pk_)');
     }
 
     if (stripeSecretKey == null || stripeSecretKey.isEmpty) {
-      issues.add('STRIPE_SECRET_KEY is not set (payment features will not work)');
+      issues
+          .add('STRIPE_SECRET_KEY is not set (payment features will not work)');
     } else if (!stripeSecretKey.startsWith('sk_')) {
-      issues.add('STRIPE_SECRET_KEY appears to be invalid (should start with sk_)');
+      issues.add(
+          'STRIPE_SECRET_KEY appears to be invalid (should start with sk_)');
     }
 
     return issues;
@@ -102,16 +106,16 @@ class EnvValidator {
 
     final issues = validateEnvironment();
     if (issues.isNotEmpty) {
-      debugPrint('⚠️ Environment Configuration Issues:');
+      debugPrint('[WARNING] Environment Configuration Issues:');
       for (final issue in issues) {
         debugPrint('  - $issue');
       }
       debugPrint(
-        '\n💡 Tip: Create a .env file in the project root with your API keys.\n'
+        '\n[TIP] Create a .env file in the project root with your API keys.\n'
         'See .env.example for a template.\n',
       );
     } else {
-      debugPrint('✅ Environment configuration validated successfully');
+      debugPrint('[OK] Environment configuration validated successfully');
     }
   }
 
@@ -119,9 +123,10 @@ class EnvValidator {
   static bool isProductionReady() {
     final issues = validateEnvironment();
     // Filter out warnings (Stripe keys are optional for basic functionality)
-    final criticalIssues = issues.where((issue) =>
-        !issue.contains('STRIPE') || issue.contains('will not work')).toList();
+    final criticalIssues = issues
+        .where((issue) =>
+            !issue.contains('STRIPE') || issue.contains('will not work'))
+        .toList();
     return criticalIssues.isEmpty;
   }
 }
-

@@ -1,0 +1,15 @@
+{
+  "status": "success",
+  "result": [
+    {
+      "name": "projects/clutterzen-1ba2e/androidApps/1:685954065928:android:e936fdd280075cd66153bd",
+      "displayName": "com.nexifyme.clutterzen",
+      "platform": "ANDROID",
+      "appId": "1:685954065928:android:e936fdd280075cd66153bd",
+      "namespace": "com.nexifyme.clutterzen",
+      "apiKeyId": "7dc5bc6a-5949-4bde-bc48-1d202f2de73b",
+      "state": "ACTIVE",
+      "expireTime": "1970-01-01T00:00:00Z"
+    }
+  ]
+}

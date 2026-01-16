@@ -8,6 +8,15 @@ ENV.*.local
 
 # Secrets
 **/secrets/**
+sha1.txt
+*.keystore
+*.jks
+*.key
+*.pem
+*.p12
+*.cer
+release-signing.properties
+key.properties
 
 # Requirements and local docs
 requirements/

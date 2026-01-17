@@ -48,8 +48,8 @@ dependencies:
   sign_in_with_apple:
   crypto:
   shared_preferences:
-  fake_cloud_firestore: ^2.4.0
-  firebase_auth_mocks: ^0.13.0
+  fake_cloud_firestore: ^4.0.1
+  firebase_auth_mocks: ^0.15.1
   # Image compression - latest version for optimal quality preservation
   flutter_image_compress: ^2.3.0
   image: ^4.3.0
@@ -60,14 +60,14 @@ dependencies:
   # Date formatting
   intl: ^0.19.0
   # Connectivity monitoring
-  connectivity_plus: ^6.0.5
+  connectivity_plus: ^7.0.0
   # Offline support
   sqflite: ^2.3.3+1
   path_provider: ^2.1.2
   # Analytics (using compatible version)
-  firebase_analytics: ^10.8.0
+  firebase_analytics: ^12.1.0
   # Crash reporting
-  firebase_crashlytics: ^3.5.0
+  firebase_crashlytics: ^5.0.6
   # Google Gemini AI for smart recommendations
   google_generative_ai: ^0.4.6
 

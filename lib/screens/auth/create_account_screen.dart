@@ -151,7 +151,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                      Icon(Icons.error_outline,
+                          color: Colors.red.shade700, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -199,7 +200,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   if (value == null || value.trim().isEmpty) {
                     return 'Please enter your email';
                   }
-                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
+                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                      .hasMatch(value.trim())) {
                     return 'Please enter a valid email address';
                   }
                   return null;
@@ -220,7 +222,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   ),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                       color: Colors.grey,
                     ),
                     onPressed: () {
@@ -273,11 +277,14 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   ),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                      _obscureConfirmPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                       color: Colors.grey,
                     ),
                     onPressed: () {
-                      setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                      setState(() =>
+                          _obscureConfirmPassword = !_obscureConfirmPassword);
                     },
                   ),
                 ),
@@ -440,16 +447,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     });
 
     try {
-      // Check if email already exists
-      final emailMethods = await AppFirebase.auth.fetchSignInMethodsForEmail(_email.text.trim());
-      if (emailMethods.isNotEmpty) {
-        setState(() {
-          _error = 'This email is already registered. Please sign in instead.';
-          _loading = false;
-        });
-        return;
-      }
-
       // Check if display name already exists (optional check)
       final nameQuery = await AppFirebase.firestore
           .collection('users')
@@ -459,7 +456,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
       if (nameQuery.docs.isNotEmpty) {
         setState(() {
-          _error = 'This name is already taken. Please choose a different name.';
+          _error =
+              'This name is already taken. Please choose a different name.';
           _loading = false;
         });
         return;
@@ -496,9 +494,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Failed to create account';
       if (e.code == 'email-already-in-use') {
-        errorMessage = 'This email is already registered. Please sign in instead.';
+        errorMessage =
+            'This email is already registered. Please sign in instead.';
       } else if (e.code == 'weak-password') {
-        errorMessage = 'Password is too weak. Please choose a stronger password.';
+        errorMessage =
+            'Password is too weak. Please choose a stronger password.';
       } else if (e.code == 'invalid-email') {
         errorMessage = 'Invalid email address. Please check and try again.';
       } else {

@@ -6,7 +6,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: const Color(0xFFFAFBFC),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -35,7 +35,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.green.shade50, Colors.green.shade100],
+                  colors: [const Color(0xFFFFFFFF), const Color(0xFFEEF1F6)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -56,7 +56,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.green,
+                          color: const Color(0xFF111111),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -90,9 +90,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Information We Collect
             _PrivacySection(
               title: 'Information We Collect',
@@ -101,29 +101,34 @@ class PrivacyPolicyScreen extends StatelessWidget {
               content: [
                 _PrivacyItem(
                   title: 'Account Information',
-                  description: 'Name, email address, profile photo, and account preferences when you create an account or update your profile.',
+                  description:
+                      'Name, email address, profile photo, and account preferences when you create an account or update your profile.',
                 ),
                 _PrivacyItem(
                   title: 'Photos and Images',
-                  description: 'Photos you upload for AI analysis, including metadata such as file size, format, and upload timestamp.',
+                  description:
+                      'Photos you upload for AI analysis, including metadata such as file size, format, and upload timestamp.',
                 ),
                 _PrivacyItem(
                   title: 'Usage Data',
-                  description: 'How you interact with our app, features used, time spent, and preferences to improve our services.',
+                  description:
+                      'How you interact with our app, features used, time spent, and preferences to improve our services.',
                 ),
                 _PrivacyItem(
                   title: 'Device Information',
-                  description: 'Device type, operating system, app version, and technical data to ensure compatibility and performance.',
+                  description:
+                      'Device type, operating system, app version, and technical data to ensure compatibility and performance.',
                 ),
                 _PrivacyItem(
                   title: 'Location Data',
-                  description: 'General location information (city/region) if you choose to share it for localized recommendations.',
+                  description:
+                      'General location information (city/region) if you choose to share it for localized recommendations.',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // How We Use Your Information
             _PrivacySection(
               title: 'How We Use Your Information',
@@ -132,29 +137,34 @@ class PrivacyPolicyScreen extends StatelessWidget {
               content: [
                 _PrivacyItem(
                   title: 'AI Analysis Services',
-                  description: 'Process your photos through our AI systems to provide personalized organization recommendations and decluttering insights.',
+                  description:
+                      'Process your photos through our AI systems to provide personalized organization recommendations and decluttering insights.',
                 ),
                 _PrivacyItem(
                   title: 'Service Improvement',
-                  description: 'Analyze usage patterns to enhance our AI algorithms, add new features, and improve user experience.',
+                  description:
+                      'Analyze usage patterns to enhance our AI algorithms, add new features, and improve user experience.',
                 ),
                 _PrivacyItem(
                   title: 'Personalization',
-                  description: 'Customize recommendations based on your preferences, past interactions, and organization goals.',
+                  description:
+                      'Customize recommendations based on your preferences, past interactions, and organization goals.',
                 ),
                 _PrivacyItem(
                   title: 'Communication',
-                  description: 'Send important updates, service notifications, and respond to your support requests.',
+                  description:
+                      'Send important updates, service notifications, and respond to your support requests.',
                 ),
                 _PrivacyItem(
                   title: 'Payment Processing',
-                  description: 'Process subscription payments and manage your account billing for Pro features.',
+                  description:
+                      'Process subscription payments and manage your account billing for Pro features.',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Photo Privacy & Security
             _PrivacySection(
               title: 'Photo Privacy & Security',
@@ -163,29 +173,34 @@ class PrivacyPolicyScreen extends StatelessWidget {
               content: [
                 _PrivacyItem(
                   title: 'End-to-End Encryption',
-                  description: 'All photos are encrypted during transmission and while stored on our servers using industry-standard AES-256 encryption.',
+                  description:
+                      'All photos are encrypted during transmission and while stored on our servers using industry-standard AES-256 encryption.',
                 ),
                 _PrivacyItem(
                   title: 'AI Processing Only',
-                  description: 'Photos are processed by our AI systems for analysis purposes only. No human review unless you explicitly request support.',
+                  description:
+                      'Photos are processed by our AI systems for analysis purposes only. No human review unless you explicitly request support.',
                 ),
                 _PrivacyItem(
                   title: 'No Third-Party Sharing',
-                  description: 'Your photos are never shared with third parties, advertisers, or other users without your explicit consent.',
+                  description:
+                      'Your photos are never shared with third parties, advertisers, or other users without your explicit consent.',
                 ),
                 _PrivacyItem(
                   title: 'Automatic Deletion',
-                  description: 'Photos are automatically deleted after analysis completion unless you choose to save them in your account.',
+                  description:
+                      'Photos are automatically deleted after analysis completion unless you choose to save them in your account.',
                 ),
                 _PrivacyItem(
                   title: 'Secure Storage',
-                  description: 'Saved photos are stored in secure, encrypted cloud storage with regular security audits and monitoring.',
+                  description:
+                      'Saved photos are stored in secure, encrypted cloud storage with regular security audits and monitoring.',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Data Sharing
             _PrivacySection(
               title: 'Data Sharing & Third Parties',
@@ -194,29 +209,34 @@ class PrivacyPolicyScreen extends StatelessWidget {
               content: [
                 _PrivacyItem(
                   title: 'No Sale of Data',
-                  description: 'We never sell, rent, or trade your personal information to third parties for marketing or commercial purposes.',
+                  description:
+                      'We never sell, rent, or trade your personal information to third parties for marketing or commercial purposes.',
                 ),
                 _PrivacyItem(
                   title: 'Service Providers',
-                  description: 'We may share data with trusted service providers who assist in app operations (cloud storage, analytics) under strict confidentiality agreements.',
+                  description:
+                      'We may share data with trusted service providers who assist in app operations (cloud storage, analytics) under strict confidentiality agreements.',
                 ),
                 _PrivacyItem(
                   title: 'Legal Requirements',
-                  description: 'We may disclose information if required by law, court order, or to protect our rights and user safety.',
+                  description:
+                      'We may disclose information if required by law, court order, or to protect our rights and user safety.',
                 ),
                 _PrivacyItem(
                   title: 'Business Transfers',
-                  description: 'In case of merger or acquisition, user data may be transferred as part of business assets with continued privacy protection.',
+                  description:
+                      'In case of merger or acquisition, user data may be transferred as part of business assets with continued privacy protection.',
                 ),
                 _PrivacyItem(
                   title: 'Consent-Based Sharing',
-                  description: 'We only share information with your explicit consent, such as when you choose to share progress with family members.',
+                  description:
+                      'We only share information with your explicit consent, such as when you choose to share progress with family members.',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Your Rights
             _PrivacySection(
               title: 'Your Privacy Rights',
@@ -225,29 +245,34 @@ class PrivacyPolicyScreen extends StatelessWidget {
               content: [
                 _PrivacyItem(
                   title: 'Access Your Data',
-                  description: 'Request a copy of all personal information we have about you, including photos and analysis results.',
+                  description:
+                      'Request a copy of all personal information we have about you, including photos and analysis results.',
                 ),
                 _PrivacyItem(
                   title: 'Correct Information',
-                  description: 'Update or correct any inaccurate personal information through your account settings or by contacting us.',
+                  description:
+                      'Update or correct any inaccurate personal information through your account settings or by contacting us.',
                 ),
                 _PrivacyItem(
                   title: 'Delete Your Data',
-                  description: 'Request complete deletion of your account and all associated data, including photos and analysis history.',
+                  description:
+                      'Request complete deletion of your account and all associated data, including photos and analysis history.',
                 ),
                 _PrivacyItem(
                   title: 'Data Portability',
-                  description: 'Export your data in a machine-readable format to transfer to another service if desired.',
+                  description:
+                      'Export your data in a machine-readable format to transfer to another service if desired.',
                 ),
                 _PrivacyItem(
                   title: 'Opt-Out Options',
-                  description: 'Unsubscribe from marketing communications while keeping essential service notifications.',
+                  description:
+                      'Unsubscribe from marketing communications while keeping essential service notifications.',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Data Retention
             _PrivacySection(
               title: 'Data Retention',
@@ -256,29 +281,34 @@ class PrivacyPolicyScreen extends StatelessWidget {
               content: [
                 _PrivacyItem(
                   title: 'Account Data',
-                  description: 'Personal information is retained as long as your account is active or as needed to provide services.',
+                  description:
+                      'Personal information is retained as long as your account is active or as needed to provide services.',
                 ),
                 _PrivacyItem(
                   title: 'Photo Analysis',
-                  description: 'Analysis results are kept for 2 years to provide historical insights and improve recommendations.',
+                  description:
+                      'Analysis results are kept for 2 years to provide historical insights and improve recommendations.',
                 ),
                 _PrivacyItem(
                   title: 'Usage Analytics',
-                  description: 'Aggregated usage data is retained for 3 years to improve our services and develop new features.',
+                  description:
+                      'Aggregated usage data is retained for 3 years to improve our services and develop new features.',
                 ),
                 _PrivacyItem(
                   title: 'Legal Compliance',
-                  description: 'Some data may be retained longer to comply with legal obligations or resolve disputes.',
+                  description:
+                      'Some data may be retained longer to comply with legal obligations or resolve disputes.',
                 ),
                 _PrivacyItem(
                   title: 'Deletion Requests',
-                  description: 'When you request deletion, we remove your data within 30 days, except where legally required to retain it.',
+                  description:
+                      'When you request deletion, we remove your data within 30 days, except where legally required to retain it.',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Children's Privacy
             _PrivacySection(
               title: 'Children\'s Privacy',
@@ -287,25 +317,29 @@ class PrivacyPolicyScreen extends StatelessWidget {
               content: [
                 _PrivacyItem(
                   title: 'Age Restrictions',
-                  description: 'Our service is not intended for children under 13. We do not knowingly collect personal information from children under 13.',
+                  description:
+                      'Our service is not intended for children under 13. We do not knowingly collect personal information from children under 13.',
                 ),
                 _PrivacyItem(
                   title: 'Parental Consent',
-                  description: 'If you are a parent and believe your child has provided us with personal information, please contact us immediately.',
+                  description:
+                      'If you are a parent and believe your child has provided us with personal information, please contact us immediately.',
                 ),
                 _PrivacyItem(
                   title: 'Teen Privacy',
-                  description: 'For users 13-17, we recommend parental guidance when using our service and sharing photos.',
+                  description:
+                      'For users 13-17, we recommend parental guidance when using our service and sharing photos.',
                 ),
                 _PrivacyItem(
                   title: 'Family Accounts',
-                  description: 'Parents can create family accounts to monitor and manage their children\'s use of our service.',
+                  description:
+                      'Parents can create family accounts to monitor and manage their children\'s use of our service.',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // International Users
             _PrivacySection(
               title: 'International Users',
@@ -314,25 +348,29 @@ class PrivacyPolicyScreen extends StatelessWidget {
               content: [
                 _PrivacyItem(
                   title: 'Data Transfers',
-                  description: 'Your information may be transferred to and processed in the United States where our servers are located.',
+                  description:
+                      'Your information may be transferred to and processed in the United States where our servers are located.',
                 ),
                 _PrivacyItem(
                   title: 'GDPR Compliance',
-                  description: 'We comply with the General Data Protection Regulation (GDPR) for users in the European Union.',
+                  description:
+                      'We comply with the General Data Protection Regulation (GDPR) for users in the European Union.',
                 ),
                 _PrivacyItem(
                   title: 'CCPA Compliance',
-                  description: 'We comply with the California Consumer Privacy Act (CCPA) for California residents.',
+                  description:
+                      'We comply with the California Consumer Privacy Act (CCPA) for California residents.',
                 ),
                 _PrivacyItem(
                   title: 'Local Laws',
-                  description: 'We respect local privacy laws and regulations in all jurisdictions where we operate.',
+                  description:
+                      'We respect local privacy laws and regulations in all jurisdictions where we operate.',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Security Measures
             _PrivacySection(
               title: 'Security Measures',
@@ -341,29 +379,34 @@ class PrivacyPolicyScreen extends StatelessWidget {
               content: [
                 _PrivacyItem(
                   title: 'Encryption',
-                  description: 'All data is encrypted in transit and at rest using industry-standard encryption protocols.',
+                  description:
+                      'All data is encrypted in transit and at rest using industry-standard encryption protocols.',
                 ),
                 _PrivacyItem(
                   title: 'Access Controls',
-                  description: 'Strict access controls limit who can view your data, with regular access audits and monitoring.',
+                  description:
+                      'Strict access controls limit who can view your data, with regular access audits and monitoring.',
                 ),
                 _PrivacyItem(
                   title: 'Security Monitoring',
-                  description: 'Continuous monitoring for security threats and immediate response to any potential breaches.',
+                  description:
+                      'Continuous monitoring for security threats and immediate response to any potential breaches.',
                 ),
                 _PrivacyItem(
                   title: 'Regular Audits',
-                  description: 'Regular security audits and penetration testing to ensure our systems remain secure.',
+                  description:
+                      'Regular security audits and penetration testing to ensure our systems remain secure.',
                 ),
                 _PrivacyItem(
                   title: 'Employee Training',
-                  description: 'All employees receive privacy and security training to protect your information.',
+                  description:
+                      'All employees receive privacy and security training to protect your information.',
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Contact Information
             Container(
               width: double.infinity,
@@ -371,7 +414,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.green.shade200),
+                border: Border.all(color: const Color(0xFFE4E7EC)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.05),
@@ -387,7 +430,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     children: [
                       Icon(
                         Icons.contact_support_outlined,
-                        color: Colors.green,
+                        color: const Color(0xFF111111),
                         size: 24,
                       ),
                       const SizedBox(width: 12),
@@ -415,13 +458,14 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   _ContactItem(
                     icon: Icons.location_on_outlined,
                     title: 'Address',
-                    value: 'ClutterZen Privacy Team\n123 Organization Street\nSan Francisco, CA 94105',
+                    value:
+                        'ClutterZen Privacy Team\n123 Organization Street\nSan Francisco, CA 94105',
                   ),
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: const Color(0xFFEEF1F6),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -436,7 +480,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 32),
           ],
         ),
@@ -465,14 +509,16 @@ class _PrivacySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Color.lerp(iconColor, const Color(0xFF111111), 0.85)!;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE4E7EC)),
         boxShadow: [
           BoxShadow(
-        color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -488,12 +534,12 @@ class _PrivacySection extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
+                    color: accent.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     icon,
-                    color: iconColor,
+                    color: accent,
                     size: 20,
                   ),
                 ),
@@ -512,9 +558,9 @@ class _PrivacySection extends StatelessWidget {
             ),
           ),
           ...content.map((item) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: item,
-          )),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: item,
+              )),
           const SizedBox(height: 20),
         ],
       ),

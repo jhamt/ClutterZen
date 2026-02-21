@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart' as siwa;
 
 import '../../app_firebase.dart';
 import '../../services/auth_service.dart';
@@ -33,7 +33,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   void initState() {
     super.initState();
     _password.addListener(_checkPasswordStrength);
-    SignInWithApple.isAvailable().then((value) {
+    siwa.SignInWithApple.isAvailable().then((value) {
       if (mounted) setState(() => _appleAvailable = value);
     });
   }
@@ -369,10 +369,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     ),
                   ],
                 ),
-                child: OutlinedButton.icon(
+                child: OutlinedButton(
                   onPressed: _loading ? null : _google,
-                  icon: const Icon(Icons.g_mobiledata),
-                  label: const Text('Continue with Google'),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 48),
                     backgroundColor: Colors.white,
@@ -381,6 +379,21 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        'assets/brands/google_g_logo.png',
+                        width: 20,
+                        height: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Continue with Google',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -397,10 +410,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                       ),
                     ],
                   ),
-                  child: OutlinedButton.icon(
+                  child: OutlinedButton(
                     onPressed: _loading ? null : _apple,
-                    icon: const Icon(Icons.apple),
-                    label: const Text('Continue with Apple'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 48),
                       backgroundColor: Colors.white,
@@ -409,6 +420,17 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.apple, size: 30),
+                        SizedBox(width: 12),
+                        Text(
+                          'Continue with Apple',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
                     ),
                   ),
                 ),

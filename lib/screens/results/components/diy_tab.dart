@@ -210,7 +210,7 @@ class _DIYTabState extends State<DIYTab> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Text('• ',
+                                      const Text('- ',
                                           style: TextStyle(
                                               fontWeight: FontWeight.bold)),
                                       Expanded(

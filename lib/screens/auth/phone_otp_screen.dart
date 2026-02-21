@@ -1,5 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart'
-    show FirebaseAuthException, PhoneAuthCredential, PhoneAuthProvider, UserCredential;
+    show
+        FirebaseAuthException,
+        PhoneAuthCredential,
+        PhoneAuthProvider,
+        UserCredential;
 import 'package:flutter/material.dart';
 import '../../app_firebase.dart';
 import '../../services/user_service.dart';
@@ -23,14 +27,42 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign in with Phone')),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          'Sign in with Phone',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         children: [
           if (_msg != null)
-            Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(_msg!, style: const TextStyle(color: Colors.red))),
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline,
+                      color: Colors.red.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _msg!,
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           TextField(
               controller: _phone,
               keyboardType: TextInputType.phone,
@@ -45,18 +77,67 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
-                child: ElevatedButton(
-                    onPressed: _sending ? null : _sendCode,
-                    child: _sending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Send Code'))),
+              child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(77),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                      onPressed: _sending ? null : _sendCode,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: _sending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ))
+                          : const Text('Send Code'))),
+            ),
             const SizedBox(width: 8),
-            OutlinedButton(
-                onPressed: (_resendToken == null || _sending) ? null : _resend,
-                child: const Text('Resend')),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withAlpha(77),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: OutlinedButton(
+                  onPressed:
+                      (_resendToken == null || _sending) ? null : _resend,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(110, 48),
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black87,
+                    side: const BorderSide(color: Colors.grey),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                  child: const Text(
+                    'Resend',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  )),
+            ),
           ]),
           const SizedBox(height: 16),
           TextField(
@@ -71,14 +152,38 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
                       borderSide: BorderSide.none,
                       borderRadius: BorderRadius.all(Radius.circular(12))))),
           const SizedBox(height: 12),
-          ElevatedButton(
-              onPressed: _verifying ? null : _verify,
-              child: _verifying
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Verify & Sign In')),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(77),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ElevatedButton(
+                onPressed: _verifying ? null : _verify,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: _verifying
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ))
+                    : const Text('Verify & Sign In')),
+          ),
         ],
       ),
     );
@@ -185,7 +290,8 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
           await AppFirebase.auth.signInWithCredential(credential);
       await UserService.ensureUserProfile(userCredential.user);
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        Navigator.of(context)
+            .pushNamedAndRemoveUntil('/home', (route) => false);
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {

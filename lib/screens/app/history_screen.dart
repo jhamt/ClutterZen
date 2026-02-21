@@ -156,10 +156,10 @@ class _HistoryCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                          color: const Color(0xFFE7FAF2),
+                          color: const Color(0xFFEEF1F6),
                           borderRadius: BorderRadius.circular(16)),
                       child: Text(category,
-                          style: const TextStyle(color: Color(0xFF10B981))),
+                          style: const TextStyle(color: Color(0xFF344054))),
                     ),
                   ],
                 ),
@@ -177,11 +177,11 @@ class _HistoryCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                        color: const Color(0xFF34D399),
+                        color: const Color(0xFF111111),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                              color: const Color(0xFF34D399).withAlpha(102),
+                              color: Colors.black.withAlpha(64),
                               blurRadius: 8,
                               offset: const Offset(0, 4))
                         ]),

@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../app_firebase.dart';
 import '../../services/user_service.dart';
 import 'package:flutter/material.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart' as siwa;
 
 import '../../services/auth_service.dart';
 
@@ -23,7 +23,7 @@ class _SignInScreenState extends State<SignInScreen> {
   @override
   void initState() {
     super.initState();
-    SignInWithApple.isAvailable().then((v) {
+    siwa.SignInWithApple.isAvailable().then((v) {
       if (mounted) setState(() => _appleAvailable = v);
     });
   }
@@ -78,7 +78,8 @@ class _SignInScreenState extends State<SignInScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                    Icon(Icons.error_outline,
+                        color: Colors.red.shade700, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -171,10 +172,8 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                 ],
               ),
-              child: OutlinedButton.icon(
+              child: OutlinedButton(
                 onPressed: _loading ? null : _signInGoogle,
-                icon: const Icon(Icons.g_mobiledata),
-                label: const Text('Continue with Google'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 48),
                   backgroundColor: Colors.white,
@@ -183,6 +182,21 @@ class _SignInScreenState extends State<SignInScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/brands/google_g_logo.png',
+                      width: 20,
+                      height: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Continue with Google',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -199,10 +213,8 @@ class _SignInScreenState extends State<SignInScreen> {
                     ),
                   ],
                 ),
-                child: OutlinedButton.icon(
+                child: OutlinedButton(
                   onPressed: _loading ? null : _signInApple,
-                  icon: const Icon(Icons.apple),
-                  label: const Text('Continue with Apple'),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 48),
                     backgroundColor: Colors.white,
@@ -211,6 +223,17 @@ class _SignInScreenState extends State<SignInScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.apple, size: 30),
+                      SizedBox(width: 12),
+                      Text(
+                        'Continue with Apple',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -226,12 +249,10 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                 ],
               ),
-              child: OutlinedButton.icon(
+              child: OutlinedButton(
                 onPressed: _loading
                     ? null
                     : () => Navigator.of(context).pushNamed('/phone'),
-                icon: const Icon(Icons.phone_iphone),
-                label: const Text('Continue with Phone'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 48),
                   backgroundColor: Colors.white,
@@ -240,6 +261,17 @@ class _SignInScreenState extends State<SignInScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.smartphone_rounded, size: 25),
+                    SizedBox(width: 12),
+                    Text(
+                      'Continue with Phone',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -272,13 +304,15 @@ class _SignInScreenState extends State<SignInScreen> {
       await _handleSignedIn(cred);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found') {
-        errorMessage = 'No account found with this email. Please sign up first.';
+        errorMessage =
+            'No account found with this email. Please sign up first.';
       } else if (e.code == 'wrong-password') {
         errorMessage = 'Incorrect password. Please try again.';
       } else if (e.code == 'invalid-email') {
         errorMessage = 'Invalid email address. Please check and try again.';
       } else if (e.code == 'user-disabled') {
-        errorMessage = 'This account has been disabled. Please contact support.';
+        errorMessage =
+            'This account has been disabled. Please contact support.';
       } else {
         errorMessage = 'Failed to sign in: ${e.message ?? e.code}';
       }
@@ -349,8 +383,7 @@ class _SignInScreenState extends State<SignInScreen> {
   Future<void> _handleSignedIn(UserCredential cred) async {
     await UserService.ensureUserProfile(cred.user);
     if (mounted) {
-      Navigator.of(context)
-          .pushNamedAndRemoveUntil('/home', (route) => false);
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     }
   }
 }

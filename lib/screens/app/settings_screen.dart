@@ -3,16 +3,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../app_firebase.dart';
 import '../../services/i18n_service.dart';
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final user = AppFirebase.auth.currentUser;
-    
+
     if (user == null) {
       return Scaffold(
-        backgroundColor: Colors.grey.shade50,
+        backgroundColor: const Color(0xFFFAFBFC),
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
@@ -37,7 +38,7 @@ class SettingsScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: const Color(0xFFFAFBFC),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -56,22 +57,19 @@ class SettingsScreen extends StatelessWidget {
         centerTitle: true,
       ),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: AppFirebase.firestore
-            .collection('users')
-            .doc(user.uid)
-            .snapshots(),
+        stream:
+            AppFirebase.firestore.collection('users').doc(user.uid).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final data = snapshot.data?.data() ?? const <String, dynamic>{};
-          final displayName = user.displayName ?? 
-              (data['displayName'] as String?) ?? 
+          final displayName = user.displayName ??
+              (data['displayName'] as String?) ??
               'Guest User';
-          final email = user.email ?? 
-              (data['email'] as String?) ?? 
-              'No email provided';
+          final email =
+              user.email ?? (data['email'] as String?) ?? 'No email provided';
           final photoUrl = user.photoURL;
           final plan = (data['plan'] as String?) ?? 'Free';
           final planNameLower = plan.toLowerCase();
@@ -82,8 +80,8 @@ class SettingsScreen extends StatelessWidget {
                   : plan;
           final creditsLeft = (data['scanCredits'] as num?)?.toInt() ?? 0;
           final creditsTotal = (data['creditsTotal'] as num?)?.toInt();
-          final bool unlimitedCredits =
-              planNameLower == 'pro' && (creditsTotal == null || creditsTotal <= 0);
+          final bool unlimitedCredits = planNameLower == 'pro' &&
+              (creditsTotal == null || creditsTotal <= 0);
           final creditsLabel = unlimitedCredits
               ? 'Unlimited'
               : '$creditsLeft${creditsTotal != null ? ' of $creditsTotal' : ''}';
@@ -95,7 +93,7 @@ class SettingsScreen extends StatelessWidget {
             child: Column(
               children: [
                 const SizedBox(height: 24),
-                
+
                 // Profile Header Section
                 Container(
                   padding: const EdgeInsets.all(24),
@@ -118,9 +116,9 @@ class SettingsScreen extends StatelessWidget {
                         height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.green.shade100,
+                          color: const Color(0xFFEEF1F6),
                           border: Border.all(
-                            color: Colors.green,
+                            color: const Color(0xFF111111),
                             width: 3,
                           ),
                         ),
@@ -135,7 +133,7 @@ class SettingsScreen extends StatelessWidget {
                                     return Icon(
                                       Icons.person,
                                       size: 40,
-                                      color: Colors.green,
+                                      color: const Color(0xFF111111),
                                     );
                                   },
                                 ),
@@ -143,11 +141,11 @@ class SettingsScreen extends StatelessWidget {
                             : Icon(
                                 Icons.person,
                                 size: 40,
-                                color: Colors.green,
+                                color: const Color(0xFF111111),
                               ),
                       ),
                       const SizedBox(width: 16),
-                      
+
                       // Profile Info
                       Expanded(
                         child: Column(
@@ -177,8 +175,8 @@ class SettingsScreen extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 color: planNameLower == 'pro'
-                                    ? Colors.green
-                                    : Colors.grey.shade200,
+                                    ? const Color(0xFF111111)
+                                    : const Color(0xFFEEF1F6),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -188,14 +186,14 @@ class SettingsScreen extends StatelessWidget {
                                   fontWeight: FontWeight.w600,
                                   color: planNameLower == 'pro'
                                       ? Colors.white
-                                      : Colors.grey[700],
+                                      : const Color(0xFF475467),
                                 ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      
+
                       // Edit Button
                       Container(
                         width: 40,
@@ -210,15 +208,16 @@ class SettingsScreen extends StatelessWidget {
                             size: 20,
                             color: Colors.grey,
                           ),
-                          onPressed: () => Navigator.of(context).pushNamed('/update-profile'),
+                          onPressed: () => Navigator.of(context)
+                              .pushNamed('/update-profile'),
                         ),
                       ),
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Personal Info Section
                 _InfoSection(
                   title: 'Personal info',
@@ -244,11 +243,12 @@ class SettingsScreen extends StatelessWidget {
                       value: address,
                     ),
                   ],
-                  onEdit: () => Navigator.of(context).pushNamed('/update-profile'),
+                  onEdit: () =>
+                      Navigator.of(context).pushNamed('/update-profile'),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Account Info Section
                 _InfoSection(
                   title: 'Account info',
@@ -271,49 +271,55 @@ class SettingsScreen extends StatelessWidget {
                   ],
                   onEdit: () => Navigator.of(context).pushNamed('/pricing'),
                 ),
-                
+
                 const SizedBox(height: 24),
-                
-                    // Settings Items
-                    _LanguageCard(),
+
+                // Settings Items
+                _LanguageCard(),
                 const SizedBox(height: 12),
-                
+
                 _SettingsCard(
                   icon: Icons.notifications_outlined,
-                  iconColor: Colors.orange,
+                  iconColor: const Color(0xFF111111),
                   title: 'Notification Settings',
-                  trailing: const Icon(Icons.keyboard_arrow_right, color: Colors.grey),
-                  onTap: () => Navigator.of(context).pushNamed('/notification-settings'),
+                  trailing: const Icon(Icons.keyboard_arrow_right,
+                      color: Colors.grey),
+                  onTap: () =>
+                      Navigator.of(context).pushNamed('/notification-settings'),
                 ),
                 const SizedBox(height: 12),
-                
+
                 _SettingsCard(
                   icon: Icons.history,
-                  iconColor: Colors.teal,
+                  iconColor: const Color(0xFF111111),
                   title: 'Scan history',
-                  trailing: const Icon(Icons.keyboard_arrow_right, color: Colors.grey),
+                  trailing: const Icon(Icons.keyboard_arrow_right,
+                      color: Colors.grey),
                   onTap: () => Navigator.of(context).pushNamed('/history'),
                 ),
                 const SizedBox(height: 12),
-                
+
                 _SettingsCard(
                   icon: Icons.card_membership,
-                  iconColor: Colors.purple,
+                  iconColor: const Color(0xFF111111),
                   title: 'Manage Subscription',
-                  trailing: const Icon(Icons.keyboard_arrow_right, color: Colors.grey),
+                  trailing: const Icon(Icons.keyboard_arrow_right,
+                      color: Colors.grey),
                   onTap: () => Navigator.of(context).pushNamed('/subscription'),
                 ),
                 const SizedBox(height: 12),
-                
+
                 _SettingsCard(
                   icon: Icons.account_balance_wallet,
-                  iconColor: Colors.blue,
+                  iconColor: const Color(0xFF111111),
                   title: 'Connect Stripe Account',
-                  trailing: const Icon(Icons.keyboard_arrow_right, color: Colors.grey),
-                  onTap: () => Navigator.of(context).pushNamed('/connect-account'),
+                  trailing: const Icon(Icons.keyboard_arrow_right,
+                      color: Colors.grey),
+                  onTap: () =>
+                      Navigator.of(context).pushNamed('/connect-account'),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // App Settings Section Header
                 const Padding(
                   padding: EdgeInsets.only(left: 16, bottom: 12),
@@ -326,34 +332,38 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 _SettingsCard(
                   icon: Icons.help_outline,
-                  iconColor: Colors.orange,
+                  iconColor: const Color(0xFF111111),
                   title: 'Support',
-                  trailing: const Icon(Icons.keyboard_arrow_right, color: Colors.grey),
+                  trailing: const Icon(Icons.keyboard_arrow_right,
+                      color: Colors.grey),
                   onTap: () => Navigator.of(context).pushNamed('/contact-us'),
                 ),
                 const SizedBox(height: 12),
-                
+
                 _SettingsCard(
                   icon: Icons.security,
                   iconColor: Colors.black,
                   title: 'Terms of Service',
-                  trailing: const Icon(Icons.keyboard_arrow_right, color: Colors.grey),
+                  trailing: const Icon(Icons.keyboard_arrow_right,
+                      color: Colors.grey),
                   onTap: () => Navigator.of(context).pushNamed('/terms'),
                 ),
                 const SizedBox(height: 12),
-                
+
                 _SettingsCard(
                   icon: Icons.privacy_tip_outlined,
-                  iconColor: Colors.blue,
+                  iconColor: const Color(0xFF111111),
                   title: 'Privacy Policy',
-                  trailing: const Icon(Icons.keyboard_arrow_right, color: Colors.grey),
-                  onTap: () => Navigator.of(context).pushNamed('/privacy-policy'),
+                  trailing: const Icon(Icons.keyboard_arrow_right,
+                      color: Colors.grey),
+                  onTap: () =>
+                      Navigator.of(context).pushNamed('/privacy-policy'),
                 ),
                 const SizedBox(height: 12),
-                
+
                 _SettingsCard(
                   icon: Icons.logout,
                   iconColor: Colors.red,
@@ -435,7 +445,7 @@ class _InfoSection extends StatelessWidget {
                   child: const Text(
                     'Edit',
                     style: TextStyle(
-                      color: Colors.green,
+                      color: Color(0xFF111111),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -444,9 +454,9 @@ class _InfoSection extends StatelessWidget {
             ),
           ),
           ...items.map((item) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: item,
-          )),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: item,
+              )),
           const SizedBox(height: 16),
         ],
       ),
@@ -581,7 +591,7 @@ class _LanguageCardState extends State<_LanguageCard> {
 
     return _SettingsCard(
       icon: Icons.language,
-      iconColor: Colors.green,
+      iconColor: const Color(0xFF111111),
       title: currentLanguage,
       trailing: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
       onTap: () => _showLanguageDialog(context),
@@ -600,7 +610,7 @@ class _LanguageCardState extends State<_LanguageCard> {
             return ListTile(
               title: Text(I18nService.getLocaleDisplayName(locale)),
               trailing: isSelected
-                  ? const Icon(Icons.check, color: Colors.green)
+                  ? const Icon(Icons.check, color: Color(0xFF111111))
                   : null,
               onTap: () {
                 I18nService.setLocale(locale);

@@ -55,25 +55,28 @@ class _RootNavState extends State<RootNav> with SingleTickerProviderStateMixin {
       drawer: const AppDrawer(),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
-        child: Container(
+        child: SizedBox(
           key: ValueKey<int>(_index),
           child: pages[_index],
         ),
       ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 8,
-              offset: Offset(0, -2),
-            ),
-          ],
-        ),
-        child: SafeArea(
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: const Color(0xFFE4E7EC)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(20),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -132,10 +135,10 @@ class _NavItem extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.black.withValues(alpha: 0.05) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          color: isSelected ? const Color(0xFF111111) : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -149,9 +152,10 @@ class _NavItem extends StatelessWidget {
                       height: 32,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isSelected ? Colors.black : Colors.grey.shade200,
+                        color: isSelected ? Colors.white : Colors.grey.shade200,
                         border: Border.all(
-                          color: isSelected ? Colors.black : Colors.grey.shade400,
+                          color:
+                              isSelected ? Colors.white : Colors.grey.shade400,
                           width: isSelected ? 2.5 : 1.5,
                         ),
                       ),
@@ -169,7 +173,9 @@ class _NavItem extends StatelessWidget {
                                     return Icon(
                                       Icons.person_rounded,
                                       size: 18,
-                                      color: isSelected ? Colors.white : Colors.grey.shade600,
+                                      color: isSelected
+                                          ? Colors.black
+                                          : Colors.grey.shade600,
                                     );
                                   },
                                 ),
@@ -177,7 +183,9 @@ class _NavItem extends StatelessWidget {
                             : Icon(
                                 Icons.person_rounded,
                                 size: 18,
-                                color: isSelected ? Colors.white : Colors.grey.shade600,
+                                color: isSelected
+                                    ? Colors.black
+                                    : Colors.grey.shade600,
                               ),
                       ),
                     )
@@ -185,7 +193,7 @@ class _NavItem extends StatelessWidget {
                       isSelected ? selectedIcon : icon,
                       key: ValueKey('icon_${isSelected}_$label'),
                       size: isSelected ? 26 : 24,
-                      color: isSelected ? Colors.black : Colors.grey.shade600,
+                      color: isSelected ? Colors.white : Colors.grey.shade600,
                     ),
             ),
             const SizedBox(height: 4),
@@ -194,7 +202,7 @@ class _NavItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? Colors.black : Colors.grey.shade600,
+                color: isSelected ? Colors.white : Colors.grey.shade600,
               ),
               child: Text(label),
             ),

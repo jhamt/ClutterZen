@@ -50,9 +50,17 @@ class _TopBar extends StatelessWidget {
     final uid = AppFirebase.auth.currentUser?.uid;
     return Row(
       children: [
-        IconButton(
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE4E7EC)),
+          ),
+          child: IconButton(
             onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
-            icon: const Icon(Icons.menu)),
+            icon: const Icon(Icons.menu_rounded),
+          ),
+        ),
         const Spacer(),
         _CreditsIndicator(uid: uid),
       ],
@@ -73,8 +81,14 @@ class _CreditsIndicator extends StatelessWidget {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: AppFirebase.firestore.collection('users').doc(uid).snapshots(),
       builder: (context, snap) {
-        final credits = snap.data?.data()?['scanCredits'];
-        final text = credits == null ? '0' : credits.toString();
+        final data = snap.data?.data() ?? const <String, dynamic>{};
+        final credits = (data['scanCredits'] as num?)?.toInt();
+        final planName = ((data['plan'] as String?) ?? '').toLowerCase().trim();
+        final creditsTotal = (data['creditsTotal'] as num?)?.toInt();
+        final unlimited = (planName == 'pro' &&
+                (creditsTotal == null || creditsTotal <= 0)) ||
+            (credits ?? 0) < 0;
+        final text = unlimited ? 'INF' : (credits ?? 0).toString();
         return _CreditsChip(text: text);
       },
     );
@@ -122,9 +136,17 @@ class _GreetingRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _DisplayName(),
-        IconButton(
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE4E7EC)),
+          ),
+          child: IconButton(
             onPressed: () => Navigator.of(context).pushNamed('/settings'),
-            icon: const Icon(Icons.settings)),
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        ),
       ],
     );
   }
@@ -136,8 +158,24 @@ class _DisplayName extends StatelessWidget {
     return StreamBuilder(
       stream: AppFirebase.auth.authStateChanges(),
       builder: (context, snap) {
-        final name = snap.data?.displayName ?? '[Display Name]';
-        return Text(name, style: Theme.of(context).textTheme.titleMedium);
+        final name = snap.data?.displayName ?? 'there';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Welcome back',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            Text(
+              name,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -154,11 +192,18 @@ class _CenterLogo extends StatelessWidget {
         height: 64,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF28A9FF), Color(0xFF48E58B)],
+            colors: [Color(0xFF1E1E1E), Color(0xFF545454)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(36),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            )
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.all(8),
@@ -176,14 +221,26 @@ class _TitleText extends StatelessWidget {
   const _TitleText();
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Center(
-      child: Text(
-        'Declutter Anything!',
-        style: Theme.of(context)
-            .textTheme
-            .titleLarge
-            ?.copyWith(fontWeight: FontWeight.bold),
-        textAlign: TextAlign.center,
+      child: Column(
+        children: [
+          Text(
+            'Declutter Anything',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Capture a room and get instant AI organization insights.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF667085),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -196,23 +253,25 @@ class _PrimaryActions extends StatelessWidget {
     return Column(
       children: [
         _ShadowButton(
-          child: ElevatedButton(
+          child: OutlinedButton.icon(
             onPressed: () => Navigator.of(context).pushNamed('/photo-upload'),
-            style: ElevatedButton.styleFrom(
+            style: OutlinedButton.styleFrom(
               backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
+              foregroundColor: const Color(0xFF111111),
+              side: const BorderSide(color: Color(0xFFD0D5DD)),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24)),
               minimumSize: const Size(double.infinity, 48),
               elevation: 0,
             ),
-            child: const Text('Take Photo'),
+            icon: const Icon(Icons.camera_alt_outlined),
+            label: const Text('Take Photo'),
           ),
         ),
         const SizedBox(height: 12),
         _ShadowButton(
           dark: true,
-          child: ElevatedButton(
+          child: ElevatedButton.icon(
             onPressed: () => Navigator.of(context).pushNamed('/photo-upload'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.black,
@@ -222,7 +281,8 @@ class _PrimaryActions extends StatelessWidget {
               minimumSize: const Size(double.infinity, 48),
               elevation: 0,
             ),
-            child: const Text('Upload from Gallery'),
+            icon: const Icon(Icons.photo_library_outlined),
+            label: const Text('Upload from Gallery'),
           ),
         ),
       ],
@@ -241,8 +301,9 @@ class _ShadowButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: (dark ? Colors.black : Colors.grey).withAlpha(102),
-            blurRadius: 12,
+            color:
+                (dark ? Colors.black : Colors.black).withAlpha(dark ? 92 : 24),
+            blurRadius: dark ? 14 : 10,
             offset: const Offset(0, 6),
           ),
         ],
@@ -314,11 +375,12 @@ class _RecentCategories extends StatelessWidget {
                 width: 180,
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE4E7EC)),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withAlpha(20),
-                        blurRadius: 8,
+                        color: Colors.black.withAlpha(18),
+                        blurRadius: 10,
                         offset: const Offset(0, 4)),
                   ],
                 ),
@@ -328,11 +390,19 @@ class _RecentCategories extends StatelessWidget {
                     Expanded(
                       child: ClipRRect(
                         borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(12),
-                            topRight: Radius.circular(12)),
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(16)),
                         child: img.isNotEmpty
                             ? Image.network(img, fit: BoxFit.cover)
-                            : Container(color: Colors.grey[300]),
+                            : Container(
+                                color: const Color(0xFFF2F4F7),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.image_outlined,
+                                    color: Color(0xFF98A2B3),
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
                     Padding(
@@ -401,8 +471,9 @@ class _RecentScansState extends State<_RecentScans> {
 
         final docs = snap.data!.docs;
         final seenIds = docs.map((d) => d.id).toSet();
-        final combinedDocs =
-            <QueryDocumentSnapshot<Map<String, dynamic>>>[...docs];
+        final combinedDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[
+          ...docs
+        ];
         for (final doc in _extraDocs) {
           if (seenIds.add(doc.id)) {
             combinedDocs.add(doc);
@@ -435,8 +506,7 @@ class _RecentScansState extends State<_RecentScans> {
           return matchesSearch && matchesCategory;
         }).toList();
 
-        final lastDoc =
-            combinedDocs.isNotEmpty ? combinedDocs.last : null;
+        final lastDoc = combinedDocs.isNotEmpty ? combinedDocs.last : null;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -570,9 +640,7 @@ class _RecentScansState extends State<_RecentScans> {
     }
   }
 
-  Widget _buildLoadMoreButton(
-      BuildContext context,
-      String uid,
+  Widget _buildLoadMoreButton(BuildContext context, String uid,
       QueryDocumentSnapshot<Map<String, dynamic>>? anchor) {
     if (anchor == null) {
       return const SizedBox.shrink();
@@ -649,21 +717,28 @@ class _RecentScansState extends State<_RecentScans> {
     return Card(
       child: ListTile(
         leading: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           child: imageUrl.isNotEmpty
               ? Image.network(imageUrl,
                   width: 56, height: 56, fit: BoxFit.cover)
               : Container(
                   width: 56,
                   height: 56,
-                  color: Colors.grey[300],
+                  color: const Color(0xFFF2F4F7),
                   alignment: Alignment.center,
                   child: const Icon(Icons.image_not_supported_outlined),
                 ),
         ),
         title: Text(title),
-        subtitle: Text('Clutter Score: $score'),
-        trailing: const Icon(Icons.chevron_right),
+        subtitle: Text('Clutter score: $score/10'),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEEF1F6),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: const Icon(Icons.chevron_right_rounded, size: 18),
+        ),
         onTap: () => _openScan(context, doc),
       ),
     );
@@ -693,7 +768,7 @@ class _RecentScansState extends State<_RecentScans> {
                       width: double.infinity, fit: BoxFit.cover)
                   : Container(
                       width: double.infinity,
-                      color: Colors.grey[200],
+                      color: const Color(0xFFF2F4F7),
                       alignment: Alignment.center,
                       child: const Icon(Icons.image_not_supported_outlined),
                     ),
@@ -719,7 +794,7 @@ class _RecentScansState extends State<_RecentScans> {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.star, size: 16, color: Colors.amber),
+                      const Icon(Icons.insights_outlined, size: 16),
                       const SizedBox(width: 4),
                       Text('Score $score/10',
                           style: Theme.of(context).textTheme.bodySmall),

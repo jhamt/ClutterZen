@@ -81,8 +81,8 @@ class CategoryDetailScreen extends StatelessWidget {
           for (final t in tips)
             Card(
               child: ListTile(
-                  leading: const Icon(Icons.check_circle_outline,
-                      color: Colors.green),
+                  leading: Icon(Icons.check_circle_outline,
+                      color: Theme.of(context).colorScheme.primary),
                   title: Text(t)),
             ),
           const SizedBox(height: 12),

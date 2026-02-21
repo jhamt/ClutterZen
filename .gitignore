@@ -3,6 +3,7 @@
 **/.env.*
 *.env
 !**/.env.example
+!**/.env.public.example
 ENV.local
 ENV.*.local
 
@@ -23,12 +24,17 @@ requirements/
 
 # Assistant / IDE artifacts
 **/.continue/
+.claude/
+.codex/
+.cursor/
+.vscode/
 .idea/
 *.iml
 *.ipr
 *.iws
 clutter_zen.iml
 devtools_options.yaml
+models.txt
 
 # Miscellaneous
 *.class

@@ -1,6 +1,12 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class Env {
+  /// Safe access to dotenv values; returns null when dotenv was not loaded.
+  static String? dotEnvValue(String key) {
+    if (!dotenv.isInitialized) return null;
+    return dotenv.env[key];
+  }
+
   // --- AI Services ---
   // Prioritize build-time value (dart-define), fallback to .env file
   static String get visionApiKey =>
@@ -11,6 +17,15 @@ class Env {
   // --- Google Gemini AI ---
   static String get geminiApiKey =>
       _get('GEMINI_API_KEY', const String.fromEnvironment('GEMINI_API_KEY'));
+
+  // --- Firebase Functions ---
+  static String get firebaseFunctionsUrl => _get(
+      'FIREBASE_FUNCTIONS_URL',
+      const String.fromEnvironment(
+        'FIREBASE_FUNCTIONS_URL',
+        defaultValue:
+            'https://us-central1-clutterzen-test.cloudfunctions.net/api',
+      ));
 
   // --- Firebase Web Config (Optional - use google-services.json instead for Android/iOS) ---
   static String get firebaseApiKey => _get(
@@ -31,15 +46,21 @@ class Env {
   static String get googleServerClientId => _get('GOOGLE_SERVER_CLIENT_ID',
       const String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID'));
 
+  // --- Stripe ---
+  static String get stripePublishableKey => _get('STRIPE_PUBLISHABLE_KEY',
+      const String.fromEnvironment('STRIPE_PUBLISHABLE_KEY'));
+  static String get stripeConnectClientId => _get('STRIPE_CONNECT_CLIENT_ID',
+      const String.fromEnvironment('STRIPE_CONNECT_CLIENT_ID'));
+
   // --- Dev Toggles ---
   static bool get disableAuthGate {
     if (const bool.fromEnvironment('DISABLE_AUTH_GATE')) return true;
-    return dotenv.env['DISABLE_AUTH_GATE']?.toLowerCase() == 'true';
+    return dotEnvValue('DISABLE_AUTH_GATE')?.toLowerCase() == 'true';
   }
 
   // --- Helper ---
   static String _get(String key, String buildTimeValue) {
     if (buildTimeValue.isNotEmpty) return buildTimeValue;
-    return dotenv.env[key] ?? '';
+    return dotEnvValue(key) ?? '';
   }
 }

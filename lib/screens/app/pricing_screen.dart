@@ -26,19 +26,32 @@ class _PricingScreenState extends State<PricingScreen> {
     if (uid == null) return;
 
     try {
-      final doc = await AppFirebase.firestore
-          .collection('users')
-          .doc(uid)
-          .get();
-      final data = doc.data();
+      final doc =
+          await AppFirebase.firestore.collection('users').doc(uid).get();
+      final data = doc.data() ?? const <String, dynamic>{};
       setState(() {
-        _currentPlanId = data?['plan'] as String? ?? 'free';
+        _currentPlanId = _resolvePlanId(data);
       });
     } catch (e) {
       setState(() {
         _currentPlanId = 'free';
       });
     }
+  }
+
+  String _resolvePlanId(Map<String, dynamic> data) {
+    final subscriptionPlan =
+        (data['subscriptionPlan'] as String?)?.trim().toLowerCase();
+    if (subscriptionPlan == 'free' || subscriptionPlan == 'pro') {
+      return subscriptionPlan!;
+    }
+
+    final plan = (data['plan'] as String?)?.trim().toLowerCase();
+    if (plan == 'free' || plan == 'pro') {
+      return plan!;
+    }
+
+    return 'free';
   }
 
   @override
@@ -50,7 +63,7 @@ class _PricingScreenState extends State<PricingScreen> {
         itemBuilder: (context, index) {
           final subscriptionPlan = SubscriptionPlan.plans[index];
           final isCurrentPlan = subscriptionPlan.id == _currentPlanId;
-          
+
           // Convert to legacy format for _PlanCard
           final plan = _PlanOption(
             name: subscriptionPlan.name,
@@ -59,10 +72,12 @@ class _PricingScreenState extends State<PricingScreen> {
             features: subscriptionPlan.features,
             highlight: subscriptionPlan.isPopular,
             credits: subscriptionPlan.scanCredits,
-            creditsTotal: subscriptionPlan.isUnlimited ? null : subscriptionPlan.scanCredits,
+            creditsTotal: subscriptionPlan.isUnlimited
+                ? null
+                : subscriptionPlan.scanCredits,
             isCurrentPlan: isCurrentPlan,
           );
-          
+
           return _PlanCard(
             plan: plan,
             onSelect: () => _selectPlan(context, subscriptionPlan),
@@ -105,19 +120,13 @@ class _PricingScreenState extends State<PricingScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${plan.name} plan activated successfully!'),
-            backgroundColor: Colors.green,
+            backgroundColor: Colors.black,
           ),
         );
       }
     } else {
       // Free plan - apply directly
-      await UserService.applyPlan(
-        uid,
-        planName: plan.name,
-        scanCredits: plan.scanCredits,
-        creditsTotal: plan.isUnlimited ? null : plan.scanCredits,
-        resetUsage: true,
-      );
+      await UserService.setFreePlan();
 
       await _loadCurrentPlan();
       if (!context.mounted) return;
@@ -138,7 +147,7 @@ class _PlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final highlightColor =
-        plan.highlight ? colorScheme.primary : Colors.grey.shade200;
+        plan.highlight ? colorScheme.primary : const Color(0xFFE4E7EC);
 
     return Container(
       decoration: BoxDecoration(
@@ -146,6 +155,7 @@ class _PlanCard extends StatelessWidget {
             ? highlightColor.withValues(alpha: 0.08)
             : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE4E7EC)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -153,7 +163,18 @@ class _PlanCard extends StatelessWidget {
             offset: const Offset(0, 6),
           ),
         ],
-        border: plan.highlight ? Border.all(color: highlightColor, width: 1.5) : null,
+        // Accent border on highlighted tier while preserving shared card chrome.
+        // ignore: deprecated_member_use
+        gradient: plan.highlight
+            ? LinearGradient(
+                colors: [
+                  Colors.white,
+                  highlightColor.withValues(alpha: 0.04),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
       ),
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -175,7 +196,7 @@ class _PlanCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: highlightColor,
+                    color: const Color(0xFF111111),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Text(
@@ -210,7 +231,7 @@ class _PlanCard extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.check_circle,
-                    color: plan.highlight ? highlightColor : Colors.green,
+                    color: const Color(0xFF111111),
                   ),
                   const SizedBox(width: 8),
                   Expanded(child: Text(feature)),
@@ -223,24 +244,37 @@ class _PlanCard extends StatelessWidget {
               onPressed: null,
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 48),
+                disabledForegroundColor: const Color(0xFF667085),
+                disabledBackgroundColor: const Color(0xFFF2F4F7),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
               child: const Text('Current Plan'),
             )
+          else if (plan.name == 'Free')
+            OutlinedButton(
+              onPressed: onSelect,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Select Free'),
+            )
           else
             ElevatedButton(
               onPressed: onSelect,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 48),
-                backgroundColor: plan.highlight ? Colors.black : Colors.white,
-                foregroundColor: plan.highlight ? Colors.white : Colors.black,
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: Text(plan.highlight ? 'Upgrade' : plan.name == 'Free' ? 'Select Free' : 'Upgrade'),
+              child: const Text('Upgrade'),
             ),
         ],
       ),

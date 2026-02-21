@@ -9,10 +9,8 @@ import 'components/before_after_slider.dart';
 import 'components/diy_tab.dart';
 import 'components/shop_tab.dart';
 import 'components/professional_tab.dart';
-import '../../services/replicate_service.dart';
-import '../../services/replicate_error_handler.dart';
 import '../../services/analysis_repository.dart';
-import '../../env.dart';
+import '../../backend/registry.dart';
 
 class ResultsScreen extends StatefulWidget {
   const ResultsScreen(
@@ -220,15 +218,11 @@ class _ResultsScreenState extends State<ResultsScreen>
           ),
           const SizedBox(height: 12),
           // Actions
-          if (Env.replicateToken.isEmpty)
-            const Text(
-                'Replicate token missing. Showing analysis without organized preview.'),
-          if (Env.replicateToken.isNotEmpty)
-            _ReplicateAction(
-              image: widget.image,
-              initialDocId: _savedDocId,
-              onAfter: (url) => setState(() => _replicateAfterUrl = url),
-            ),
+          _ReplicateAction(
+            image: widget.image,
+            initialDocId: _savedDocId,
+            onAfter: (url) => setState(() => _replicateAfterUrl = url),
+          ),
           const SizedBox(height: 8),
           _SaveButton(
             image: widget.image,
@@ -439,7 +433,6 @@ class _ReplicateActionState extends State<_ReplicateAction> {
   String? _afterUrl;
   String? _error;
   String? _analysisDocId;
-  ReplicateProgress? _progress;
 
   @override
   void initState() {
@@ -475,7 +468,8 @@ class _ReplicateActionState extends State<_ReplicateAction> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                  Icon(Icons.error_outline,
+                      color: Colors.red.shade700, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -487,38 +481,18 @@ class _ReplicateActionState extends State<_ReplicateAction> {
               ),
             ),
           ),
-        if (_progress != null && _progress!.isProcessing)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        if (_loading)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        value: _progress!.progress,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _progress!.statusMessage ?? 'Processing...',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                if (_progress!.progress != null) ...[
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: _progress!.progress,
-                    minHeight: 4,
-                  ),
-                ],
+                SizedBox(width: 12),
+                Expanded(child: Text('Generating organized preview...')),
               ],
             ),
           ),
@@ -532,22 +506,9 @@ class _ReplicateActionState extends State<_ReplicateAction> {
                 )
               : const Icon(Icons.auto_fix_high_outlined),
           label: _loading
-              ? Text(_progress?.statusMessage ?? 'Generating...')
-              : const Text('Generate Organized Image (Replicate)'),
+              ? const Text('Generating...')
+              : const Text('Generate Organized Image'),
         ),
-        if (_progress != null && 
-            _progress!.status == ReplicateStatus.failed && 
-            _afterUrl == null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'Using original image as fallback',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Colors.grey[600]),
-            ),
-          ),
       ],
     );
   }
@@ -556,7 +517,6 @@ class _ReplicateActionState extends State<_ReplicateAction> {
     setState(() {
       _loading = true;
       _error = null;
-      _progress = null;
     });
     try {
       // Requires an accessible URL; if using local image, upload to storage first and pass URL.
@@ -566,38 +526,14 @@ class _ReplicateActionState extends State<_ReplicateAction> {
         return;
       }
       final url = (widget.image as NetworkImage).url;
-      final token = Env.replicateToken;
-      if (token.isEmpty) {
-        setState(() => _error = 'Missing REPLICATE_API_TOKEN.');
-        return;
-      }
-      
-      // Create service with progress callback
-      final service = ReplicateService(
-        apiToken: token,
-        onProgress: (progress) {
-          if (mounted) {
-            setState(() {
-              _progress = progress;
-            });
-          }
-        },
-      );
-      
-      // Generate with fallback enabled
-      final after = await service.generateOrganizedImage(
+      final after = await Registry.replicate.generateOrganizedImage(
         imageUrl: url,
-        fallbackToOriginal: true, // Enable fallback
       );
-      
+
       setState(() {
         _afterUrl = after;
-        // If fallback was used, after will be the original URL
-        if (after == url && _progress?.status == ReplicateStatus.failed) {
-          // Generation failed, using original
-        }
       });
-      
+
       widget.onAfter?.call(after);
       // Optionally save/update analysis with organized image URL if a prior save exists
       try {
@@ -632,33 +568,20 @@ class _ReplicateActionState extends State<_ReplicateAction> {
       } catch (_) {
         // Non-fatal: do not block UI if Firestore write fails
       }
-    } on ReplicateApiError catch (e) {
-      setState(() {
-        _error = ReplicateErrorHandler.getUserFriendlyMessage(e);
-        _progress = ReplicateProgress(
-          status: ReplicateStatus.failed,
-          statusMessage: 'Generation failed',
-        );
-      });
     } catch (e) {
       final errorString = e.toString();
       String errorMessage;
-      
+
       if (errorString.contains('timeout') || errorString.contains('Timeout')) {
         errorMessage = 'Generation timed out. Using original image.';
-      } else if (errorString.contains('network') || errorString.contains('Network')) {
+      } else if (errorString.contains('network') ||
+          errorString.contains('Network')) {
         errorMessage = 'Network error. Please check your connection.';
       } else {
         errorMessage = 'Generation failed: ${e.toString()}';
       }
-      
-      setState(() {
-        _error = errorMessage;
-        _progress = ReplicateProgress(
-          status: ReplicateStatus.failed,
-          statusMessage: 'Generation failed',
-        );
-      });
+
+      setState(() => _error = errorMessage);
     } finally {
       setState(() => _loading = false);
     }

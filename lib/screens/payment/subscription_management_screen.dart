@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../app_firebase.dart';
@@ -37,13 +36,11 @@ class _SubscriptionManagementScreenState
     }
 
     try {
-      final doc = await AppFirebase.firestore
-          .collection('users')
-          .doc(uid)
-          .get();
-      final data = doc.data();
+      final doc =
+          await AppFirebase.firestore.collection('users').doc(uid).get();
+      final data = doc.data() ?? const <String, dynamic>{};
       setState(() {
-        _currentPlanId = data?['plan'] as String? ?? 'free';
+        _currentPlanId = _resolvePlanId(data);
         _loading = false;
       });
     } catch (e) {
@@ -52,6 +49,21 @@ class _SubscriptionManagementScreenState
         _loading = false;
       });
     }
+  }
+
+  String _resolvePlanId(Map<String, dynamic> data) {
+    final subscriptionPlan =
+        (data['subscriptionPlan'] as String?)?.trim().toLowerCase();
+    if (subscriptionPlan == 'free' || subscriptionPlan == 'pro') {
+      return subscriptionPlan!;
+    }
+
+    final plan = (data['plan'] as String?)?.trim().toLowerCase();
+    if (plan == 'free' || plan == 'pro') {
+      return plan!;
+    }
+
+    return 'free';
   }
 
   Future<void> _upgradeToPlan(SubscriptionPlan plan) async {
@@ -105,10 +117,8 @@ class _SubscriptionManagementScreenState
 
     try {
       // Cancel Stripe subscription if exists
-      final userDoc = await AppFirebase.firestore
-          .collection('users')
-          .doc(uid)
-          .get();
+      final userDoc =
+          await AppFirebase.firestore.collection('users').doc(uid).get();
       final stripeSubscriptionId =
           userDoc.data()?['stripeSubscriptionId'] as String?;
 
@@ -121,22 +131,8 @@ class _SubscriptionManagementScreenState
         }
       }
 
-      // Apply free plan
-      final freePlan = SubscriptionPlan.plans.firstWhere((p) => p.id == 'free');
-      await UserService.applyPlan(
-        uid,
-        planName: freePlan.name,
-        scanCredits: freePlan.scanCredits,
-        creditsTotal: freePlan.scanCredits,
-        resetUsage: true,
-      );
-
-      // Update Firestore
-      await AppFirebase.firestore.collection('users').doc(uid).set({
-        'subscriptionPlan': 'free',
-        'subscriptionStatus': 'canceled',
-        'subscriptionCanceledAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      // Downgrade plan server-side.
+      await UserService.setFreePlan();
 
       await _loadCurrentSubscription();
 
@@ -322,10 +318,11 @@ class _SubscriptionManagementScreenState
                       const SizedBox(height: 12),
                       Text(
                         plan.formattedPrice,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
                       ),
                       const SizedBox(height: 12),
                       ...plan.features.map((feature) => Padding(
@@ -369,4 +366,3 @@ class _SubscriptionManagementScreenState
     );
   }
 }
-

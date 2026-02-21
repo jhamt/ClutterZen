@@ -46,9 +46,19 @@ class _CaptureScreenState extends State<CaptureScreen> {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final credits =
-                    snapshot.data?.data()?['scanCredits'] as int? ?? 0;
-                final hasCredits = credits > 0;
+                final userData =
+                    snapshot.data?.data() ?? const <String, dynamic>{};
+                final credits = (userData['scanCredits'] as num?)?.toInt() ?? 0;
+                final planName = ((userData['plan'] as String?) ?? '')
+                    .toLowerCase()
+                    .trim();
+                final creditsTotal =
+                    (userData['creditsTotal'] as num?)?.toInt();
+                final hasUnlimitedCredits =
+                    (planName == 'pro' &&
+                        (creditsTotal == null || creditsTotal <= 0)) ||
+                    credits < 0;
+                final hasCredits = hasUnlimitedCredits || credits > 0;
 
                 return Column(
                   children: [
@@ -87,7 +97,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
                               onPressed:
                                   _image == null || _loading || !hasCredits
                                       ? null
-                                      : () => _analyze(uid, credits),
+                                      : () => _analyze(
+                                            uid,
+                                            credits,
+                                            hasUnlimitedCredits:
+                                                hasUnlimitedCredits,
+                                          ),
                               child: _loading
                                   ? const SizedBox(
                                       width: 20,
@@ -138,13 +153,17 @@ class _CaptureScreenState extends State<CaptureScreen> {
     }
   }
 
-  Future<void> _analyze(String uid, int availableCredits) async {
+  Future<void> _analyze(
+    String uid,
+    int availableCredits, {
+    required bool hasUnlimitedCredits,
+  }) async {
     if (_image == null) return;
     setState(() => _loading = true);
     final scaffold = ScaffoldMessenger.of(context);
     bool creditReserved = false;
     try {
-      if (availableCredits <= 0) {
+      if (!hasUnlimitedCredits && availableCredits <= 0) {
         scaffold.showSnackBar(
             const SnackBar(content: Text('You have no scan credits left.')));
         return;
@@ -182,11 +201,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
       
       // Log compression stats (can be removed in production)
       if (mounted) {
-        debugPrint('Image compression: ${(originalSize / 1024 / 1024).toStringAsFixed(2)}MB → '
-                   '${(compressedSize / 1024 / 1024).toStringAsFixed(2)}MB '
-                   '(${compressionResult.sizeReductionPercent.toStringAsFixed(1)}% reduction)');
+        debugPrint('Image compression: '
+            '${(originalSize / 1024 / 1024).toStringAsFixed(2)}MB -> '
+            '${(compressedSize / 1024 / 1024).toStringAsFixed(2)}MB '
+            '(${compressionResult.sizeReductionPercent.toStringAsFixed(1)}% reduction)');
       }
-      
+
       if (!mounted) {
         await UserService.refundCredit(uid);
         return;
@@ -363,7 +383,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
                         action: isRecoverable
                             ? SnackBarAction(
                                 label: 'Retry',
-                                onPressed: () => _analyze(uid, availableCredits),
+                                onPressed: () => _analyze(
+                                  uid,
+                                  availableCredits,
+                                  hasUnlimitedCredits: hasUnlimitedCredits,
+                                ),
                               )
                             : null,
                       ),
@@ -390,7 +414,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
           action: isRecoverable
               ? SnackBarAction(
                   label: 'Retry',
-                  onPressed: () => _analyze(uid, availableCredits),
+                  onPressed: () => _analyze(
+                    uid,
+                    availableCredits,
+                    hasUnlimitedCredits: hasUnlimitedCredits,
+                  ),
                 )
               : null,
         ),

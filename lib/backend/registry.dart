@@ -1,22 +1,21 @@
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../app_firebase.dart';
-import '../env.dart';
 import 'interfaces/analysis_repository.dart';
 import 'interfaces/storage_repository.dart';
 import 'interfaces/vision_provider.dart';
 import 'interfaces/generate_provider.dart';
 import 'firebase/firebase_analysis_repository.dart';
 import 'firebase/firebase_storage_repository.dart';
-import '../services/vision_service.dart';
 import '../models/vision_models.dart';
-import '../services/replicate_service.dart';
+import '../services/firebase_functions_service.dart';
 import 'interfaces/local_store.dart';
 import 'local/shared_prefs_store.dart';
 import 'dart:typed_data';
 import 'interfaces/gemini_provider.dart';
 import '../services/gemini_service.dart';
 import '../models/gemini_models.dart';
+import '../env.dart';
 
 class BackendRegistry {
   BackendRegistry._();
@@ -30,21 +29,19 @@ class BackendRegistry {
   }
 
   static IVisionProvider visionProvider() {
-    if (Env.visionApiKey.isEmpty) {
-      throw StateError(
-          'VISION_API_KEY is not configured. Add it to your .env file.');
-    }
-    final svc = VisionService(apiKey: Env.visionApiKey);
-    return _VisionAdapter(svc);
+    final svc = FirebaseFunctionsService(
+      functionsUrl:
+          Env.firebaseFunctionsUrl.isEmpty ? null : Env.firebaseFunctionsUrl,
+    );
+    return _FunctionsVisionAdapter(svc);
   }
 
   static IGenerateProvider generateProvider() {
-    if (Env.replicateToken.isEmpty) {
-      throw StateError(
-          'REPLICATE_API_TOKEN is not configured. Add it to your .env file.');
-    }
-    final svc = ReplicateService(apiToken: Env.replicateToken);
-    return _GenerateAdapter(svc);
+    final svc = FirebaseFunctionsService(
+      functionsUrl:
+          Env.firebaseFunctionsUrl.isEmpty ? null : Env.firebaseFunctionsUrl,
+    );
+    return _FunctionsGenerateAdapter(svc);
   }
 
   static ILocalStore localStore() {
@@ -103,26 +100,51 @@ class Registry {
   }
 }
 
-class _VisionAdapter implements IVisionProvider {
-  _VisionAdapter(this._svc);
-  final VisionService _svc;
+class _FunctionsVisionAdapter implements IVisionProvider {
+  _FunctionsVisionAdapter(this._svc);
+  final FirebaseFunctionsService _svc;
   @override
   Future<VisionAnalysis> analyzeImageBytes(Uint8List bytes) =>
-      _svc.analyzeImageBytes(bytes);
+      _svc.analyzeImageViaFunction(imageBytes: bytes);
   @override
   Future<VisionAnalysis> analyzeImageUrl(String imageUrl) =>
-      _svc.analyzeImageUrl(imageUrl);
+      _svc.analyzeImageViaFunction(imageUrl: imageUrl);
 }
 
-class _GenerateAdapter implements IGenerateProvider {
-  _GenerateAdapter(this._svc);
-  final ReplicateService _svc;
+class _FunctionsGenerateAdapter implements IGenerateProvider {
+  _FunctionsGenerateAdapter(this._svc);
+  final FirebaseFunctionsService _svc;
   @override
-  Future<String> generateOrganizedImage({required String imageUrl}) =>
-      _svc.generateOrganizedImage(
-        imageUrl: imageUrl,
-        fallbackToOriginal: true,
-      );
+  Future<String> generateOrganizedImage({required String imageUrl}) async {
+    try {
+      return await _svc.generateOrganizedImageViaFunction(imageUrl: imageUrl);
+    } catch (e) {
+      // Replicate failed or quota exceeded, try Gemini fallback
+      try {
+        final prompt =
+            'A perfectly organized, clean and tidy version of this space, high quality, photorealistic interior design';
+        final fallbackBytes =
+            await Registry.gemini.generateImageFallback(prompt);
+        if (fallbackBytes != null) {
+          // Upload to Firebase Storage
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final fileName = 'fallback_images/organized_$timestamp.jpg';
+          final fallbackUrl = await Registry.storage.uploadBytes(
+            path: fileName,
+            data: fallbackBytes,
+            contentType: 'image/jpeg',
+          );
+          return fallbackUrl;
+        }
+      } catch (_) {
+        // Ignore fallback errors and return original
+      }
+
+      // Non-blocking fallback to original image keeps the UX usable even when
+      // the generation proxy is unavailable.
+      return imageUrl;
+    }
+  }
 }
 
 class _GeminiAdapter implements IGeminiProvider {
@@ -141,4 +163,8 @@ class _GeminiAdapter implements IGeminiProvider {
         imageBytes: imageBytes,
         clutterScore: clutterScore,
       );
+
+  @override
+  Future<Uint8List?> generateImageFallback(String prompt) =>
+      _svc.generateImageFallback(prompt);
 }

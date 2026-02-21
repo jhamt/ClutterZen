@@ -18,8 +18,6 @@ class ContactService {
     required String message,
   }) async {
     try {
-      final uid = AppFirebase.auth.currentUser?.uid;
-      
       // Validate inputs
       if (name.trim().isEmpty) {
         throw Exception('Name is required');
@@ -33,6 +31,8 @@ class ContactService {
       if (message.trim().length < 10) {
         throw Exception('Message must be at least 10 characters');
       }
+
+      final uid = AppFirebase.auth.currentUser?.uid;
 
       // Save to Firestore
       await AppFirebase.firestore.collection('contact_submissions').add({
@@ -81,4 +81,3 @@ class ContactService {
     });
   }
 }
-

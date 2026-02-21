@@ -15,6 +15,37 @@ service cloud.firestore {
       // This is a basic check - consider implementing App Check for production
       return true;
     }
+
+    function safeUserCreate() {
+      return (!('plan' in request.resource.data) ||
+              request.resource.data.plan in ['free', 'Free'])
+        && (!('scanCredits' in request.resource.data) ||
+            (request.resource.data.scanCredits is int &&
+             request.resource.data.scanCredits >= 0 &&
+             request.resource.data.scanCredits <= 3))
+        && !('creditsTotal' in request.resource.data)
+        && !('creditsUsed' in request.resource.data)
+        && !('stripeCustomerId' in request.resource.data)
+        && !('stripeSubscriptionId' in request.resource.data)
+        && !('subscriptionPlan' in request.resource.data)
+        && !('subscriptionStatus' in request.resource.data)
+        && !('stripePriceId' in request.resource.data);
+    }
+
+    function protectedUserFieldsUnchanged() {
+      return request.resource.data.plan == resource.data.plan
+        && request.resource.data.scanCredits == resource.data.scanCredits
+        && request.resource.data.creditsTotal == resource.data.creditsTotal
+        && request.resource.data.creditsUsed == resource.data.creditsUsed
+        && request.resource.data.stripeCustomerId == resource.data.stripeCustomerId
+        && request.resource.data.stripeSubscriptionId == resource.data.stripeSubscriptionId
+        && request.resource.data.subscriptionPlan == resource.data.subscriptionPlan
+        && request.resource.data.subscriptionStatus == resource.data.subscriptionStatus
+        && request.resource.data.stripePriceId == resource.data.stripePriceId
+        && request.resource.data.planUpdatedAt == resource.data.planUpdatedAt
+        && request.resource.data.subscriptionStartedAt == resource.data.subscriptionStartedAt
+        && request.resource.data.subscriptionCanceledAt == resource.data.subscriptionCanceledAt;
+    }
     
     // Analyses collection
     match /analyses/{docId} {
@@ -22,15 +53,30 @@ service cloud.firestore {
       allow create: if signedIn() 
         && request.resource.data.uid == request.auth.uid
         && rateLimit();
-      allow update, delete: if false; // Analyses are immutable after creation
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.organizedImageUrl is string
+        && request.resource.data.diff(resource.data).changedKeys()
+            .hasOnly(['organizedImageUrl']);
+      allow delete: if false;
     }
     
     // Users collection
     match /users/{userId} {
       allow read: if signedIn() && userId == request.auth.uid;
-      allow create: if signedIn() && userId == request.auth.uid;
-      allow update: if signedIn() && userId == request.auth.uid;
+      allow create: if signedIn()
+        && userId == request.auth.uid
+        && safeUserCreate();
+      allow update: if signedIn()
+        && userId == request.auth.uid
+        && protectedUserFieldsUnchanged();
       allow delete: if false; // Prevent accidental deletion
+
+      match /saved_plans/{planId} {
+        allow read, create, update, delete: if signedIn()
+          && userId == request.auth.uid;
+      }
     }
     
     // Contact submissions
@@ -53,15 +99,34 @@ service cloud.firestore {
       allow create: if signedIn() 
         && request.resource.data.userId == request.auth.uid
         && rateLimit();
-      allow update: if signedIn() && resource.data.userId == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.paymentIntentId == resource.data.paymentIntentId
+        && request.resource.data.professionalAccountId == resource.data.professionalAccountId
+        && request.resource.data.amount == resource.data.amount
+        && request.resource.data.currency == resource.data.currency
+        && request.resource.data.applicationFee == resource.data.applicationFee
+        && request.resource.data.diff(resource.data).changedKeys()
+            .hasOnly(['status', 'professionalName', 'hours', 'serviceDate', 'notes', 'confirmedAt']);
       allow delete: if false;
     }
     
     // Stripe connected accounts
     match /stripe_connected_accounts/{userId} {
       allow read: if signedIn() && userId == request.auth.uid;
-      allow create, update: if signedIn() && userId == request.auth.uid;
+      allow create, update, delete: if false; // Managed server-side only
+    }
+
+    // OAuth state docs used by backend callbacks only
+    match /stripe_oauth_states/{stateId} {
+      allow read, write: if false;
+    }
+
+    // Deny all other documents by default
+    match /{document=**} {
       allow delete: if false;
+      allow read, write: if false;
     }
   }
 }

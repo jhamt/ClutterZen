@@ -10,9 +10,8 @@ Future<void> setupTestEnvironment() async {
   TestWidgetsFlutterBinding.ensureInitialized();
   setupFirebaseCoreMocks();
 
-  // Use testLoad for test environment
-  // This loads from a string instead of file
-  dotenv.testLoad(fileInput: '''
+  // Load env values from an inline string for tests.
+  dotenv.loadFromString(envString: '''
 GEMINI_API_KEY=test_key
 VISION_API_KEY=test_key
 STRIPE_PUBLISHABLE_KEY=test_key

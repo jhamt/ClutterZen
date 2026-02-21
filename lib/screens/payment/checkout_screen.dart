@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 
@@ -35,7 +34,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       await StripeService.initialize();
       if (!StripeService.isInitialized) {
         setState(() {
-          _errorMessage = 'Stripe is not configured. Please add your Stripe API keys to .env file.';
+          _errorMessage =
+              'Stripe is not configured. Please add STRIPE_PUBLISHABLE_KEY to .env.public.';
         });
       }
     } catch (e) {
@@ -48,7 +48,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _processPayment() async {
     if (!StripeService.isInitialized) {
       setState(() {
-        _errorMessage = 'Payment system not available. Please configure Stripe API keys.';
+        _errorMessage =
+            'Payment system not available. Please configure client/public Stripe settings.';
       });
       return;
     }
@@ -66,13 +67,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       // For free plan, just apply it without payment
       if (widget.plan.price == 0) {
-        await UserService.applyPlan(
-          uid,
-          planName: widget.plan.name,
-          scanCredits: widget.plan.scanCredits,
-          creditsTotal: widget.plan.isUnlimited ? null : widget.plan.scanCredits,
-          resetUsage: true,
-        );
+        await UserService.setFreePlan();
 
         if (!mounted) return;
         Navigator.of(context).pop(true); // Return success
@@ -87,7 +82,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       // For paid plans, process payment
       if (widget.plan.priceId.isEmpty) {
-        throw Exception('Plan price ID not configured. Please set up Stripe Price IDs in subscription_plan.dart');
+        throw Exception(
+            'Plan price ID not configured. Please set up Stripe Price IDs in subscription_plan.dart');
       }
 
       // Process subscription payment
@@ -96,17 +92,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         customerId: null, // Will create customer automatically
       );
 
-      // Payment successful, apply plan
-      await UserService.applyPlan(
-        uid,
-        planName: widget.plan.name,
-        scanCredits: widget.plan.scanCredits,
-        creditsTotal: widget.plan.isUnlimited ? null : widget.plan.scanCredits,
-        resetUsage: true,
-      );
+      final subscriptionId = StripeService.lastCreatedSubscriptionId;
+      if (subscriptionId == null || subscriptionId.isEmpty) {
+        throw Exception('Missing subscription ID after payment');
+      }
 
-      // Store subscription info (you may want to store Stripe subscription ID in Firestore)
-      await _saveSubscriptionInfo(uid);
+      // Payment successful, activate plan server-side after ownership/status verification.
+      await StripeService.activateSubscription(
+        subscriptionId: subscriptionId,
+        planId: widget.plan.id,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop(true); // Return success
@@ -133,20 +128,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  Future<void> _saveSubscriptionInfo(String uid) async {
-    try {
-      await AppFirebase.firestore.collection('users').doc(uid).set({
-        'subscriptionPlan': widget.plan.id,
-        'subscriptionStatus': 'active',
-        'subscriptionStartedAt': DateTime.now().toIso8601String(),
-        'stripePriceId': widget.plan.priceId,
-      }, SetOptions(merge: true));
-    } catch (e) {
-      // Non-critical error, log but don't fail
-      debugPrint('Failed to save subscription info: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -168,9 +149,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     children: [
                       Text(
                         widget.plan.name,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -182,7 +164,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       const SizedBox(height: 16),
                       Text(
                         widget.plan.formattedPrice,
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: Theme.of(context).colorScheme.primary,
                             ),
@@ -192,9 +177,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       const SizedBox(height: 16),
                       Text(
                         'Features:',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
                       ),
                       const SizedBox(height: 8),
                       ...widget.plan.features.map((feature) => Padding(
@@ -216,7 +202,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              
+
               // Error message
               if (_errorMessage != null)
                 Container(
@@ -239,9 +225,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ],
                   ),
                 ),
-              
+
               if (_errorMessage != null) const SizedBox(height: 16),
-              
+
               // Payment button
               ElevatedButton(
                 onPressed: _processing || !StripeService.isInitialized
@@ -266,9 +252,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         style: const TextStyle(fontSize: 16),
                       ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // Security notice
               Row(
                 children: [
@@ -284,7 +270,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                 ],
               ),
-              
+
               if (!StripeService.isInitialized) ...[
                 const SizedBox(height: 24),
                 Container(
@@ -299,7 +285,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.info_outline, color: Colors.orange.shade700),
+                          Icon(Icons.info_outline,
+                              color: Colors.orange.shade700),
                           const SizedBox(width: 8),
                           Text(
                             'Stripe Not Configured',
@@ -312,10 +299,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'To enable payments, add your Stripe API keys to the .env file:\n'
-                        '1. Copy .env.example to .env\n'
-                        '2. Add your Stripe publishable and secret keys\n'
-                        '3. Restart the app',
+                        'To enable payments:\n'
+                        '1. Configure STRIPE_PUBLISHABLE_KEY in .env.public\n'
+                        '2. Configure STRIPE_SECRET_KEY in Firebase Functions env\n'
+                        '3. Deploy functions and restart the app',
                         style: TextStyle(color: Colors.orange.shade700),
                       ),
                     ],
@@ -329,4 +316,3 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 }
-

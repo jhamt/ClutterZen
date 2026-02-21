@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -20,35 +22,17 @@ Future<void> main() async {
 
   // Load environment variables from .env file
   try {
-    await dotenv.load(fileName: '.env');
+    await dotenv.load(fileName: '.env.public', isOptional: true);
   } catch (e) {
     if (kDebugMode) {
-      debugPrint('Warning: Could not load .env file: $e');
+      debugPrint('Warning: Could not load env files: $e');
       debugPrint(
-          'Continuing without .env file (using environment variables or defaults)');
+          'Continuing without env files (using environment variables or defaults)');
     }
   }
 
   // Validate environment configuration
   EnvValidator.performRuntimeCheck();
-
-  // Initialize analytics
-  await AnalyticsService.initialize();
-
-  // Initialize crash reporting
-  await CrashlyticsService.initialize();
-
-  // Initialize connectivity service and sync offline queue when online
-  connectivityService.connectivityStream.listen((isConnected) {
-    if (isConnected) {
-      // Sync pending operations when connection is restored
-      OfflineQueueService.syncPendingAnalyses().catchError((e) {
-        if (kDebugMode) {
-          debugPrint('Error syncing offline queue: $e');
-        }
-      });
-    }
-  });
 
   try {
     final opts = DefaultFirebaseOptions.currentPlatformOrNull;
@@ -64,14 +48,41 @@ Future<void> main() async {
     }
   }
 
-  // Set user ID for Crashlytics if authenticated
-  final user = AppFirebase.auth.currentUser;
-  if (user != null) {
-    await CrashlyticsService.setUserId(user.uid);
-    await AnalyticsService.setUserId(user.uid);
-  }
-
   runApp(MyApp());
+
+  // Perform non-UI-critical startup work in the background so first frame
+  // appears immediately after runApp.
+  unawaited(_initializeBackgroundServices());
+}
+
+Future<void> _initializeBackgroundServices() async {
+  // Initialize analytics and crash reporting after Firebase is ready.
+  await AnalyticsService.initialize();
+  await CrashlyticsService.initialize();
+
+  // Initialize connectivity service and sync offline queue when online
+  connectivityService.connectivityStream.listen((isConnected) {
+    if (isConnected) {
+      // Sync pending operations when connection is restored
+      OfflineQueueService.syncPendingAnalyses().catchError((e) {
+        if (kDebugMode) {
+          debugPrint('Error syncing offline queue: $e');
+        }
+      });
+    }
+  });
+
+  try {
+    final user = AppFirebase.auth.currentUser;
+    if (user != null) {
+      await CrashlyticsService.setUserId(user.uid);
+      await AnalyticsService.setUserId(user.uid);
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      debugPrint('Skipping user analytics/crashlytics setup: $e');
+    }
+  }
 }
 
 class MyApp extends StatelessWidget {

@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../app_firebase.dart';
+import '../../env.dart';
 import '../../models/professional_service.dart';
 import '../../services/stripe_service.dart';
 
@@ -59,14 +60,16 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
   Future<void> _bookAndPay() async {
     if (!StripeService.isInitialized) {
       setState(() {
-        _errorMessage = 'Payment system not available. Please configure Stripe.';
+        _errorMessage =
+            'Payment system not available. Please configure STRIPE_PUBLISHABLE_KEY.';
       });
       return;
     }
 
     if (widget.professional.stripeAccountId == null) {
       setState(() {
-        _errorMessage = 'Professional has not connected their Stripe account yet.';
+        _errorMessage =
+            'Professional has not connected their Stripe account yet.';
       });
       return;
     }
@@ -92,7 +95,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
       final idToken = await AppFirebase.auth.currentUser!.getIdToken();
 
       // Create payment intent via Firebase Function
-      final functionsUrl = 'https://us-central1-clutterzen-test.cloudfunctions.net/api';
+      final functionsUrl = Env.firebaseFunctionsUrl;
       final response = await http.post(
         Uri.parse('$functionsUrl/stripe/connect/create-payment-intent'),
         headers: {
@@ -166,10 +169,15 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
     }
   }
 
-  Future<void> _updateBookingStatus(String paymentIntentId, String status) async {
+  Future<void> _updateBookingStatus(
+      String paymentIntentId, String status) async {
     try {
+      final uid = AppFirebase.auth.currentUser?.uid;
+      if (uid == null) return;
+
       final bookings = await AppFirebase.firestore
           .collection('service_bookings')
+          .where('userId', isEqualTo: uid)
           .where('paymentIntentId', isEqualTo: paymentIntentId)
           .limit(1)
           .get();
@@ -181,7 +189,8 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
           'hours': _hours,
           'serviceDate': _selectedDate,
           'notes': _notes,
-          if (status == 'confirmed') 'confirmedAt': FieldValue.serverTimestamp(),
+          if (status == 'confirmed')
+            'confirmedAt': FieldValue.serverTimestamp(),
         });
       }
     } catch (e) {
@@ -271,7 +280,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                           ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Hours selector
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -312,7 +321,8 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                           icon: const Icon(Icons.calendar_today, size: 18),
                           label: Text(
                             _selectedDate != null
-                                ? DateFormat('MMM dd, yyyy').format(_selectedDate!)
+                                ? DateFormat('MMM dd, yyyy')
+                                    .format(_selectedDate!)
                                 : 'Select date',
                           ),
                         ),
@@ -353,7 +363,8 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('${_hours.toStringAsFixed(1)} hours @ ${widget.professional.formattedRate}'),
+                        Text(
+                            '${_hours.toStringAsFixed(1)} hours @ ${widget.professional.formattedRate}'),
                         Text(_totalAmount.toStringAsFixed(2)),
                       ],
                     ),
@@ -377,13 +388,17 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                       children: [
                         Text(
                           'Total',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                         ),
                         Text(
                           '\$${_grandTotal.toStringAsFixed(2)}',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: Theme.of(context).colorScheme.primary,
                               ),
@@ -422,9 +437,10 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
 
             // Book button
             ElevatedButton(
-              onPressed: _processing || widget.professional.stripeAccountId == null
-                  ? null
-                  : _bookAndPay,
+              onPressed:
+                  _processing || widget.professional.stripeAccountId == null
+                      ? null
+                      : _bookAndPay,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -454,7 +470,8 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
+                    Icon(Icons.info_outline,
+                        color: Colors.orange.shade700, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -476,4 +493,3 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
     );
   }
 }
-

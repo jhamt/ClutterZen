@@ -20,13 +20,18 @@ class CrashlyticsService {
 
       // Pass Flutter errors to Crashlytics
       FlutterError.onError = (errorDetails) {
+        if (kDebugMode) {
+          // Keep default red-screen + console diagnostics in debug.
+          FlutterError.presentError(errorDetails);
+        }
         _crashlytics?.recordFlutterFatalError(errorDetails);
       };
 
       // Pass async errors to Crashlytics
       PlatformDispatcher.instance.onError = (error, stack) {
         _crashlytics?.recordError(error, stack, fatal: true);
-        return true;
+        // Don't swallow async exceptions in debug mode.
+        return !kDebugMode;
       };
 
       if (kDebugMode) {

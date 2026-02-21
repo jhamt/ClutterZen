@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -7,13 +6,13 @@ import '../../services/stripe_connect_service.dart';
 import '../../services/stripe_oauth_handler.dart';
 
 /// Screen for connecting a Stripe account (for professionals)
-/// 
+///
 /// This screen allows professionals to:
 /// - Connect their existing Stripe account via OAuth
 /// - Create a new Stripe account
 /// - View their connection status
-/// 
-/// Note: Customer-provided account OAuth will be fully implemented later
+///
+/// OAuth flow is handled server-side by Firebase Functions.
 class ConnectAccountScreen extends StatefulWidget {
   const ConnectAccountScreen({super.key});
 
@@ -48,12 +47,12 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
       if (doc.exists) {
         final data = doc.data()!;
         final accountId = data['accountId'] as String?;
-        
+
         if (accountId != null) {
           setState(() {
             _connectedAccountId = accountId;
           });
-          
+
           // Check if account is ready
           final isReady = await StripeConnectService.isAccountReady(accountId);
           setState(() {
@@ -73,7 +72,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
   Future<void> _connectExistingAccount() async {
     if (!StripeConnectService.isConfigured) {
       setState(() {
-        _errorMessage = 'Stripe Connect is not configured. Please contact support.';
+        _errorMessage =
+            'Stripe Connect is not configured. Please contact support.';
       });
       return;
     }
@@ -84,25 +84,12 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
     });
 
     try {
-      final uid = AppFirebase.auth.currentUser?.uid;
-      if (uid == null) {
+      if (AppFirebase.auth.currentUser?.uid == null) {
         throw Exception('User not authenticated');
       }
 
-      // Generate secure OAuth state
-      final state = StripeOAuthHandler.generateOAuthState(uid);
-
-      // Generate return URL
-      // For web: use Firebase Function URL
-      // For mobile: use deep link (clutterzen://stripe/oauth/return)
-      final functionsUrl = 'https://us-central1-clutterzen-test.cloudfunctions.net/api';
-      final returnUrl = '$functionsUrl/stripe/oauth/return';
-
-      // Launch OAuth flow
-      await StripeConnectService.launchOAuthFlow(
-        returnUrl: returnUrl,
-        state: state,
-      );
+      // Launch OAuth flow via server-generated one-time state.
+      await StripeConnectService.launchOAuthFlow();
 
       // Note: After OAuth, Stripe redirects to the return URL
       // The Firebase Function handles the callback and saves to Firestore
@@ -132,7 +119,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
   Future<void> _createNewAccount() async {
     if (!StripeConnectService.isConfigured) {
       setState(() {
-        _errorMessage = 'Stripe Connect is not configured. Please contact support.';
+        _errorMessage =
+            'Stripe Connect is not configured. Please contact support.';
       });
       return;
     }
@@ -143,11 +131,10 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
     });
 
     try {
-      final uid = AppFirebase.auth.currentUser?.uid;
       final user = AppFirebase.auth.currentUser;
       final email = user?.email;
 
-      if (uid == null || email == null) {
+      if (user == null || email == null) {
         throw Exception('User not authenticated or email not available');
       }
 
@@ -158,36 +145,17 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
         country: 'US', // Default, can be made configurable
       );
 
-      // Create account link for onboarding via Firebase Function
-      // This keeps the secret key server-side
-      final functionsUrl = 'https://us-central1-clutterzen-test.cloudfunctions.net/api';
-      final returnUrl = '$functionsUrl/stripe/oauth/return';
-      final refreshUrl = '$functionsUrl/stripe/oauth/return';
-      
-      final accountLinkUrl = await StripeOAuthHandler.createAccountLinkViaFunction(
+      // Create account link via Firebase Function.
+      final accountLinkUrl =
+          await StripeOAuthHandler.createAccountLinkViaFunction(
         accountId: accountId,
-        returnUrl: returnUrl,
-        refreshUrl: refreshUrl,
       );
-
-      // Save account ID to Firestore
-      await AppFirebase.firestore
-          .collection('stripe_connected_accounts')
-          .doc(uid)
-          .set({
-        'accountId': accountId,
-        'userId': uid,
-        'email': email,
-        'type': 'standard',
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
 
       // Launch account link in browser
       final uri = Uri.parse(accountLinkUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -372,7 +340,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                             ),
                             const SizedBox(height: 16),
                             OutlinedButton.icon(
-                              onPressed: _loading ? null : _connectExistingAccount,
+                              onPressed:
+                                  _loading ? null : _connectExistingAccount,
                               icon: const Icon(Icons.link),
                               label: const Text('Connect Existing Account'),
                               style: OutlinedButton.styleFrom(
@@ -396,8 +365,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'This feature will be fully implemented soon. '
-                                      'For now, please create a new account.',
+                                      'You will be redirected to Stripe to '
+                                      'authorize your existing account.',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.blue.shade700,
@@ -495,10 +464,10 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '• Connect your Stripe account to accept payments\n'
-                          '• Customers pay you directly through the platform\n'
-                          '• Funds are transferred to your bank account\n'
-                          '• Platform fees are automatically deducted',
+                          '- Connect your Stripe account to accept payments\n'
+                          '- Customers pay you directly through the platform\n'
+                          '- Funds are transferred to your bank account\n'
+                          '- Platform fees are automatically deducted',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
@@ -510,4 +479,3 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
     );
   }
 }
-

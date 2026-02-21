@@ -1,19 +1,19 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../app_firebase.dart';
+import '../env.dart';
 
 /// Service for handling Stripe OAuth callbacks and state management
-/// 
+///
 /// This service manages:
 /// - OAuth state generation and validation
 /// - Handling OAuth callbacks
 /// - Deep linking for mobile apps
 class StripeOAuthHandler {
   /// Generate OAuth state token for security
-  /// 
+  ///
   /// Uses user ID and timestamp to create a unique state
   static String generateOAuthState(String userId) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -22,25 +22,25 @@ class StripeOAuthHandler {
   }
 
   /// Validate OAuth state token
-  /// 
+  ///
   /// Extracts user ID from state and validates it matches current user
   static String? validateOAuthState(String state) {
     try {
       final decoded = utf8.decode(base64Decode(state));
       final parts = decoded.split(':');
       if (parts.length != 2) return null;
-      
+
       final userId = parts[0];
       final timestamp = int.tryParse(parts[1]);
-      
+
       if (timestamp == null) return null;
-      
+
       // Check if state is not too old (5 minutes max)
       final stateAge = DateTime.now().millisecondsSinceEpoch - timestamp;
       if (stateAge > 5 * 60 * 1000) {
         return null; // State expired
       }
-      
+
       return userId;
     } catch (e) {
       debugPrint('Error validating OAuth state: $e');
@@ -49,12 +49,12 @@ class StripeOAuthHandler {
   }
 
   /// Handle OAuth callback from Stripe
-  /// 
+  ///
   /// This is called when Stripe redirects back after OAuth authorization
-  /// 
+  ///
   /// [code] - Authorization code from Stripe
   /// [state] - State parameter for validation
-  /// 
+  ///
   /// Returns the connected account ID
   static Future<String> handleOAuthCallback({
     required String code,
@@ -77,8 +77,7 @@ class StripeOAuthHandler {
     final idToken = await currentUser.getIdToken();
 
     final response = await http.get(
-      Uri.parse('$functionsUrl/stripe/oauth/return')
-          .replace(queryParameters: {
+      Uri.parse('$functionsUrl/stripe/oauth/return').replace(queryParameters: {
         'code': code,
         'state': state,
       }),
@@ -96,7 +95,7 @@ class StripeOAuthHandler {
           'OAuth completed. Please refresh to see your connected account.',
         );
       }
-      
+
       final error = jsonDecode(response.body);
       throw Exception(error['error'] ?? 'Failed to complete OAuth');
     }
@@ -125,28 +124,20 @@ class StripeOAuthHandler {
 
   /// Get Firebase Functions URL
   static String _getFunctionsUrl() {
-    // Try environment variable first
-    final fromEnv = dotenv.env['FIREBASE_FUNCTIONS_URL'];
-    if (fromEnv != null && fromEnv.isNotEmpty) {
-      return fromEnv;
-    }
-
-    // Fallback to default pattern
-    // This should match your deployed function URL
-    return 'https://us-central1-clutterzen-test.cloudfunctions.net/api';
+    return Env.firebaseFunctionsUrl;
   }
 
   /// Create account link via Firebase Function
-  /// 
+  ///
   /// This keeps the secret key server-side
   static Future<String> createAccountLinkViaFunction({
     required String accountId,
-    required String returnUrl,
-    required String refreshUrl,
+    String? returnUrl,
+    String? refreshUrl,
   }) async {
     final functionsUrl = _getFunctionsUrl();
     final user = AppFirebase.auth.currentUser;
-    
+
     if (user == null) {
       throw Exception('User not authenticated');
     }
@@ -161,8 +152,9 @@ class StripeOAuthHandler {
       },
       body: jsonEncode({
         'accountId': accountId,
-        'returnUrl': returnUrl,
-        'refreshUrl': refreshUrl,
+        if (returnUrl != null && returnUrl.isNotEmpty) 'returnUrl': returnUrl,
+        if (refreshUrl != null && refreshUrl.isNotEmpty)
+          'refreshUrl': refreshUrl,
       }),
     );
 
@@ -179,4 +171,3 @@ class StripeOAuthHandler {
     return url;
   }
 }
-

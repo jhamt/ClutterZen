@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+
 import 'package:google_generative_ai/google_generative_ai.dart';
 
 import '../models/gemini_models.dart';
@@ -79,6 +82,55 @@ class GeminiService {
       diyPlan: [],
       summary: 'Unable to generate recommendations from any AI model.',
     );
+  }
+
+  /// Generates an image using Gemini (gemini-2.5-flash-image) as a fallback
+  Future<Uint8List?> generateImageFallback(String prompt) async {
+    try {
+      final url = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=$_apiKey');
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {"text": prompt}
+              ]
+            }
+          ]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final candidates = data['candidates'] as List<dynamic>?;
+        if (candidates != null && candidates.isNotEmpty) {
+          final parts = candidates.first['content']?['parts'] as List<dynamic>?;
+          if (parts != null && parts.isNotEmpty) {
+            for (final part in parts) {
+              if (part['inlineData'] != null) {
+                final base64Image = part['inlineData']['data'] as String?;
+                if (base64Image != null) {
+                  return base64Decode(base64Image);
+                }
+              }
+            }
+          }
+        }
+      } else {
+        debugPrint(
+            'Gemini API Error: ${response.statusCode} - ${response.body}');
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Gemini API Exception: $e');
+      // In case of error (network, quota, etc.), just return null so it falls back gracefully
+      return null;
+    }
   }
 
   String _buildPrompt({

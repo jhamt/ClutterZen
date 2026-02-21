@@ -16,4 +16,7 @@ abstract class IGeminiProvider {
     Uint8List? imageBytes,
     double? clutterScore,
   });
+
+  /// Generates an image using Gemini's text-to-image model as a fallback.
+  Future<Uint8List?> generateImageFallback(String prompt);
 }

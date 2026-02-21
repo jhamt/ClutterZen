@@ -4,11 +4,12 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../models/vision_models.dart';
 import '../app_firebase.dart';
+import '../env.dart';
 import 'vision_error_handler.dart';
 
 /// Service to call Firebase Cloud Functions for secure API proxy
 /// This keeps API keys on the server side
-/// 
+///
 /// Note: Requires Firebase Functions to be deployed and API keys configured
 /// via: firebase functions:config:set vision.key="YOUR_KEY" replicate.token="YOUR_TOKEN"
 class FirebaseFunctionsService {
@@ -27,10 +28,10 @@ class FirebaseFunctionsService {
   /// Get the Firebase Functions URL
   /// Falls back to default if not provided
   String get _baseUrl {
-    if (_functionsUrl != null) return _functionsUrl!;
-    // Default Firebase Functions URL pattern
-    // This should match your deployed function URL
-    return 'https://us-central1-clutterzen-test.cloudfunctions.net/api';
+    if (_functionsUrl != null && _functionsUrl!.isNotEmpty) {
+      return _functionsUrl!;
+    }
+    return Env.firebaseFunctionsUrl;
   }
 
   /// Get ID token for authenticated requests
@@ -61,7 +62,7 @@ class FirebaseFunctionsService {
         final headers = <String, String>{
           'Content-Type': 'application/json',
         };
-        
+
         if (idToken != null) {
           headers['Authorization'] = 'Bearer $idToken';
         }
@@ -73,16 +74,18 @@ class FirebaseFunctionsService {
           body['imageBase64'] = base64Encode(imageBytes);
         }
 
-        final response = await _client.post(
-          Uri.parse('$_baseUrl/vision/analyze'),
-          headers: headers,
-          body: jsonEncode(body),
-        ).timeout(_retryConfig.timeout);
+        final response = await _client
+            .post(
+              Uri.parse('$_baseUrl/vision/analyze'),
+              headers: headers,
+              body: jsonEncode(body),
+            )
+            .timeout(_retryConfig.timeout);
 
         // Success
         if (response.statusCode == 200) {
           final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-          
+
           // Check for errors in response
           if (decoded.containsKey('error')) {
             final error = VisionErrorHandler.parseErrorResponse(response);
@@ -90,7 +93,7 @@ class FirebaseFunctionsService {
               throw error;
             }
           }
-          
+
           final data = decoded['data'] as Map<String, dynamic>?;
           if (data == null) {
             throw VisionApiError(
@@ -100,7 +103,7 @@ class FirebaseFunctionsService {
               isRateLimit: false,
             );
           }
-          
+
           final responses = data['responses'] as List<dynamic>? ?? const [];
 
           if (responses.isEmpty) {
@@ -108,7 +111,7 @@ class FirebaseFunctionsService {
           }
 
           final primary = responses.first as Map<String, dynamic>;
-          
+
           // Check for errors in individual response
           if (primary.containsKey('error')) {
             final errorData = primary['error'] as Map<String, dynamic>;
@@ -120,15 +123,18 @@ class FirebaseFunctionsService {
               isRateLimit: false,
             );
           }
-          
+
           final objectsRaw =
-              primary['localizedObjectAnnotations'] as List<dynamic>? ?? const [];
+              primary['localizedObjectAnnotations'] as List<dynamic>? ??
+                  const [];
           final labelsRaw =
               primary['labelAnnotations'] as List<dynamic>? ?? const [];
 
           final objects = objectsRaw.map((raw) {
             final data = raw as Map<String, dynamic>;
-            final vertices = data['boundingPoly']?['normalizedVertices'] as List<dynamic>? ?? const [];
+            final vertices =
+                data['boundingPoly']?['normalizedVertices'] as List<dynamic>? ??
+                    const [];
             return DetectedObject(
               name: (data['name'] ?? 'object').toString(),
               confidence: ((data['score'] ?? 0.0) as num).toDouble(),
@@ -138,7 +144,8 @@ class FirebaseFunctionsService {
 
           final labels = labelsRaw
               .map((entry) =>
-                  (entry as Map<String, dynamic>)['description']?.toString() ?? '')
+                  (entry as Map<String, dynamic>)['description']?.toString() ??
+                  '')
               .where((value) => value.isNotEmpty)
               .toList(growable: false);
 
@@ -150,9 +157,12 @@ class FirebaseFunctionsService {
         if (error == null) {
           throw VisionApiError(
             statusCode: response.statusCode,
-            message: 'Vision API failed: ${response.body.substring(0, response.body.length.clamp(0, 200))}',
-            isRetryable: VisionErrorHandler.isRetryableError(response.statusCode),
-            isRateLimit: VisionErrorHandler.isRateLimitError(response.statusCode),
+            message:
+                'Vision API failed: ${response.body.substring(0, response.body.length.clamp(0, 200))}',
+            isRetryable:
+                VisionErrorHandler.isRetryableError(response.statusCode),
+            isRateLimit:
+                VisionErrorHandler.isRateLimitError(response.statusCode),
           );
         }
 
@@ -189,7 +199,8 @@ class FirebaseFunctionsService {
         lastError = VisionApiError(
           statusCode: 408,
           message: 'Request timeout: ${e.toString()}',
-          isRetryable: _retryConfig.retryOnTimeout && attempt < _retryConfig.maxAttempts,
+          isRetryable:
+              _retryConfig.retryOnTimeout && attempt < _retryConfig.maxAttempts,
           isRateLimit: false,
         );
 
@@ -225,8 +236,9 @@ class FirebaseFunctionsService {
     }
 
     // All retries exhausted
-    throw lastError ?? 
-        Exception('Vision API request failed after ${_retryConfig.maxAttempts} attempts');
+    throw lastError ??
+        Exception(
+            'Vision API request failed after ${_retryConfig.maxAttempts} attempts');
   }
 
   /// Determines if we should retry based on error and attempt number
@@ -234,7 +246,9 @@ class FirebaseFunctionsService {
     if (attempt >= _retryConfig.maxAttempts) return false;
     if (!error.isRetryable) return false;
     if (error.isRateLimit && !_retryConfig.retryOnRateLimit) return false;
-    if (error.statusCode >= 500 && !_retryConfig.retryOnServerError) return false;
+    if (error.statusCode >= 500 && !_retryConfig.retryOnServerError) {
+      return false;
+    }
     return true;
   }
 
@@ -247,19 +261,23 @@ class FirebaseFunctionsService {
       final headers = <String, String>{
         'Content-Type': 'application/json',
       };
-      
+
       if (idToken != null) {
         headers['Authorization'] = 'Bearer $idToken';
       }
 
-      final response = await _client.post(
-        Uri.parse('$_baseUrl/replicate/generate'),
-        headers: headers,
-        body: jsonEncode({'imageUrl': imageUrl}),
-      ).timeout(const Duration(seconds: 120)); // Longer timeout for generation
+      final response = await _client
+          .post(
+            Uri.parse('$_baseUrl/replicate/generate'),
+            headers: headers,
+            body: jsonEncode({'imageUrl': imageUrl}),
+          )
+          .timeout(
+              const Duration(seconds: 120)); // Longer timeout for generation
 
       if (response.statusCode != 200) {
-        throw Exception('Replicate API failed: ${response.statusCode} ${response.body}');
+        throw Exception(
+            'Replicate API failed: ${response.statusCode} ${response.body}');
       }
 
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -276,4 +294,3 @@ class FirebaseFunctionsService {
     }
   }
 }
-

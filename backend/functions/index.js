@@ -17,6 +17,265 @@ const OAUTH_STATE_TTL_MS = 5 * 60 * 1000;
 const FREE_PLAN_CREDITS = 3;
 const PRO_PLAN_ID = "pro";
 const PRO_PLAN_NAME = "Pro";
+const GEMINI_TEXT_MODELS = [
+  "gemini-3-pro-preview",
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+];
+const GEMINI_IMAGE_MODELS = [
+  "nano-banana-pro-preview",
+  "gemini-3-pro-image-preview",
+  "gemini-2.5-flash-image",
+];
+
+function getGeminiApiKey() {
+  return process.env.GEMINI_API_KEY || functions.config().gemini?.key || "";
+}
+
+function extractGeminiText(responseJson) {
+  const candidates = Array.isArray(responseJson?.candidates) ?
+    responseJson.candidates :
+    [];
+  for (const rawCandidate of candidates) {
+    const candidate = rawCandidate || {};
+    const parts = Array.isArray(candidate?.content?.parts) ?
+      candidate.content.parts :
+      [];
+    for (const rawPart of parts) {
+      const text = rawPart?.text;
+      if (typeof text === "string" && text.trim()) {
+        return text.trim();
+      }
+    }
+  }
+  return null;
+}
+
+function extractGeminiInlineImage(responseJson) {
+  const candidates = Array.isArray(responseJson?.candidates) ?
+    responseJson.candidates :
+    [];
+  for (const rawCandidate of candidates) {
+    const candidate = rawCandidate || {};
+    const parts = Array.isArray(candidate?.content?.parts) ?
+      candidate.content.parts :
+      [];
+    for (const rawPart of parts) {
+      const inlineData = rawPart?.inlineData || rawPart?.inline_data;
+      if (!inlineData || typeof inlineData !== "object") continue;
+      const payload = inlineData.data;
+      if (typeof payload !== "string" || !payload) continue;
+      const mimeType = inlineData.mimeType || inlineData.mime_type || "image/png";
+      return {mimeType, data: payload};
+    }
+  }
+  return null;
+}
+
+function parseJsonFromMarkdown(text) {
+  let clean = (text || "").trim();
+  if (!clean) return null;
+  if (clean.startsWith("```json")) clean = clean.slice(7).trim();
+  if (clean.startsWith("```")) clean = clean.slice(3).trim();
+  if (clean.endsWith("```")) clean = clean.slice(0, -3).trim();
+  try {
+    return JSON.parse(clean);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRecommendationPayload(rawPayload) {
+  const payload = rawPayload && typeof rawPayload === "object" ? rawPayload : {};
+  const rawServices = Array.isArray(payload.services) ? payload.services : [];
+  const rawProducts = Array.isArray(payload.products) ? payload.products : [];
+  const rawDiyPlan = Array.isArray(payload.diyPlan) ? payload.diyPlan : [];
+
+  const services = rawServices.map((entry) => {
+    const item = entry && typeof entry === "object" ? entry : {};
+    return {
+      name: String(item.name || "Unknown Service"),
+      description: String(item.description || ""),
+      category: String(item.category || "General"),
+      estimatedCost: Number.isFinite(Number(item.estimatedCost)) ?
+        Number(item.estimatedCost) :
+        null,
+    };
+  });
+
+  const products = rawProducts.map((entry) => {
+    const item = entry && typeof entry === "object" ? entry : {};
+    return {
+      name: String(item.name || "Unknown Product"),
+      description: String(item.description || ""),
+      category: String(item.category || "General"),
+      price: Number.isFinite(Number(item.price)) ? Number(item.price) : null,
+      affiliateUrl: item.affiliateUrl ? String(item.affiliateUrl) : null,
+      imageUrl: item.imageUrl ? String(item.imageUrl) : null,
+    };
+  });
+
+  const diyPlan = rawDiyPlan.map((entry, index) => {
+    const item = entry && typeof entry === "object" ? entry : {};
+    const tipsRaw = Array.isArray(item.tips) ? item.tips : [];
+    const parsedStep = Number(item.stepNumber);
+    const stepNumber =
+      Number.isFinite(parsedStep) && parsedStep > 0 ? parsedStep : index + 1;
+    return {
+      stepNumber,
+      title: String(item.title || `Step ${stepNumber}`),
+      description: String(item.description || ""),
+      tips: tipsRaw.map((tip) => String(tip)).filter((tip) => tip),
+    };
+  });
+
+  const summary = payload.summary ? String(payload.summary) : null;
+  return {summary, services, products, diyPlan};
+}
+
+function buildGeminiRecommendationPrompt({
+  spaceDescription,
+  detectedObjects,
+  clutterScore,
+}) {
+  const safeObjects = Array.isArray(detectedObjects) ?
+    detectedObjects.map((value) => String(value).trim()).filter((value) => value) :
+    [];
+  const objectsLine = safeObjects.length ? safeObjects.join(", ") : "none";
+  const scoreLine =
+    Number.isFinite(Number(clutterScore)) ? Number(clutterScore) : 50;
+  const descriptionLine = spaceDescription ? String(spaceDescription) : "";
+
+  return `
+You are an expert home organizer. Create practical recommendations for this cluttered space.
+
+Space description: ${descriptionLine || "not provided"}
+Detected objects: ${objectsLine}
+Clutter score (0-100): ${scoreLine}
+
+Respond with strict JSON only in this shape:
+{
+  "summary": "Short overall plan",
+  "services": [
+    {"name":"", "description":"", "category":"", "estimatedCost": 0}
+  ],
+  "products": [
+    {"name":"", "description":"", "category":"", "price": 0}
+  ],
+  "diyPlan": [
+    {"stepNumber":1, "title":"", "description":"", "tips":["",""]}
+  ]
+}
+
+Rules:
+- Keep services to 2-4 entries.
+- Keep products to 3-6 entries.
+- Keep DIY plan to 4-6 steps.
+- Output valid JSON only.
+`.trim();
+}
+
+async function callGeminiGenerateContent({apiKey, modelName, payload}) {
+  const endpoint =
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}` +
+    `:generateContent?key=${apiKey}`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Gemini ${modelName} failed (${response.status}): ${body.slice(0, 260)}`);
+  }
+  return response.json();
+}
+
+async function generateGeminiRecommendations({
+  apiKey,
+  spaceDescription,
+  detectedObjects,
+  clutterScore,
+}) {
+  const prompt = buildGeminiRecommendationPrompt({
+    spaceDescription,
+    detectedObjects,
+    clutterScore,
+  });
+
+  let lastError = null;
+  for (const modelName of GEMINI_TEXT_MODELS) {
+    try {
+      const responseJson = await callGeminiGenerateContent({
+        apiKey,
+        modelName,
+        payload: {
+          contents: [
+            {
+              role: "user",
+              parts: [{text: prompt}],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2048,
+            responseMimeType: "application/json",
+          },
+        },
+      });
+      const text = extractGeminiText(responseJson);
+      if (!text) continue;
+      const parsed = parseJsonFromMarkdown(text);
+      if (!parsed) continue;
+      const normalized = normalizeRecommendationPayload(parsed);
+      return {modelName, data: normalized};
+    } catch (error) {
+      lastError = error;
+      functions.logger.warn(`Gemini recommendation failed on ${modelName}`, error);
+    }
+  }
+
+  if (lastError) throw lastError;
+  throw new Error("All Gemini recommendation models returned empty output");
+}
+
+async function generateGeminiImageFallback({
+  apiKey,
+  prompt,
+}) {
+  let lastError = null;
+  for (const modelName of GEMINI_IMAGE_MODELS) {
+    try {
+      const responseJson = await callGeminiGenerateContent({
+        apiKey,
+        modelName,
+        payload: {
+          contents: [
+            {
+              role: "user",
+              parts: [{text: String(prompt || "")}],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        },
+      });
+      const image = extractGeminiInlineImage(responseJson);
+      if (image?.data) {
+        return {modelName, image};
+      }
+    } catch (error) {
+      lastError = error;
+      functions.logger.warn(`Gemini image fallback failed on ${modelName}`, error);
+    }
+  }
+
+  if (lastError) throw lastError;
+  throw new Error("All Gemini image models returned empty output");
+}
 
 function getDefaultFunctionsBaseUrl() {
   const projectId = process.env.GCLOUD_PROJECT;
@@ -239,6 +498,86 @@ app.post("/replicate/generate", authenticate, async (req, res) => {
 });
 
 /**
+ * POST /gemini/recommend
+ * body: { spaceDescription?: string, detectedObjects?: string[], clutterScore?: number }
+ * Requires authentication
+ */
+app.post("/gemini/recommend", authenticate, async (req, res) => {
+  try {
+    const geminiApiKey = getGeminiApiKey();
+    if (!geminiApiKey) {
+      return res.status(500).json({error: "GEMINI_API_KEY not configured"});
+    }
+
+    const {
+      spaceDescription,
+      detectedObjects = [],
+      clutterScore,
+    } = req.body ?? {};
+    const safeObjects = Array.isArray(detectedObjects) ?
+      detectedObjects.map((value) => String(value)).filter((value) => value) :
+      [];
+    if (!spaceDescription && safeObjects.length === 0) {
+      return res.status(400).json({
+        error: "Provide spaceDescription or detectedObjects",
+      });
+    }
+
+    const result = await generateGeminiRecommendations({
+      apiKey: geminiApiKey,
+      spaceDescription: spaceDescription ? String(spaceDescription) : null,
+      detectedObjects: safeObjects.slice(0, 50),
+      clutterScore: Number.isFinite(Number(clutterScore)) ?
+        Number(clutterScore) :
+        null,
+    });
+
+    return res.json({
+      data: result.data,
+      model: result.modelName,
+    });
+  } catch (error) {
+    functions.logger.error("Gemini recommendation failed", error);
+    return res.status(500).json({error: error.message});
+  }
+});
+
+/**
+ * POST /gemini/image-fallback
+ * body: { prompt: string }
+ * Requires authentication
+ */
+app.post("/gemini/image-fallback", authenticate, async (req, res) => {
+  try {
+    const geminiApiKey = getGeminiApiKey();
+    if (!geminiApiKey) {
+      return res.status(500).json({error: "GEMINI_API_KEY not configured"});
+    }
+
+    const prompt = req.body?.prompt;
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({error: "prompt is required"});
+    }
+
+    const result = await generateGeminiImageFallback({
+      apiKey: geminiApiKey,
+      prompt: prompt.slice(0, 1200),
+    });
+
+    return res.json({
+      data: {
+        imageBase64: result.image.data,
+        mimeType: result.image.mimeType,
+      },
+      model: result.modelName,
+    });
+  } catch (error) {
+    functions.logger.error("Gemini image fallback failed", error);
+    return res.status(500).json({error: error.message});
+  }
+});
+
+/**
  * POST /user/credits/consume
  * Consumes one scan credit for the authenticated user.
  */
@@ -440,7 +779,7 @@ app.get("/stripe/oauth/return", async (req, res) => {
     let userId;
     try {
       userId = await consumeOAuthStateOrThrow(String(state));
-    } catch (_) {
+    } catch {
       return res.status(400).json({error: "Invalid or expired OAuth state"});
     }
     const tokenData = await tokenResponse.json();
@@ -1081,4 +1420,12 @@ app.get("/stripe/subscription/:subscriptionId", authenticate, async (req, res) =
   }
 });
 
-exports.api = functions.https.onRequest(app);
+const projectServiceAccount = process.env.GCLOUD_PROJECT ?
+  `${process.env.GCLOUD_PROJECT}@appspot.gserviceaccount.com` :
+  null;
+
+const functionBuilder = projectServiceAccount ?
+  functions.runWith({serviceAccount: projectServiceAccount}) :
+  functions;
+
+exports.api = functionBuilder.https.onRequest(app);

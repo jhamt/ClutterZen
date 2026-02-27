@@ -45,14 +45,29 @@ class EnvValidator {
       );
     }
 
-    // Gemini powers recommendation tabs.
-    final geminiKey = Env.geminiApiKey.trim();
-    if (geminiKey.isEmpty) {
+    final visionKey = Env.dotEnvValue('VISION_API_KEY')?.trim() ?? '';
+    if (visionKey.isNotEmpty) {
       issues.add(
-        'GEMINI_API_KEY is not set (AI recommendation tabs will be limited).',
+        'VISION_API_KEY is present in client env (security risk; call Vision through Firebase Functions only).',
       );
-    } else if (!_isValidApiKey(geminiKey)) {
+    }
+
+    final replicateToken = Env.dotEnvValue('REPLICATE_API_TOKEN')?.trim() ?? '';
+    if (replicateToken.isNotEmpty) {
+      issues.add(
+        'REPLICATE_API_TOKEN is present in client env (security risk; call Replicate through Firebase Functions only).',
+      );
+    }
+
+    // Gemini can run via Firebase Functions; client key is optional.
+    final geminiKey = Env.dotEnvValue('GEMINI_API_KEY')?.trim() ?? '';
+    if (geminiKey.isNotEmpty && !_isValidApiKey(geminiKey)) {
       issues.add('GEMINI_API_KEY appears to be invalid.');
+    }
+    if (geminiKey.isNotEmpty) {
+      issues.add(
+        'GEMINI_API_KEY is present in client env (recommended to proxy Gemini through Firebase Functions in production).',
+      );
     }
 
     // Recommended for robust Google Sign-In on Android/iOS.

@@ -19,6 +19,23 @@ class GeminiRecommendation {
         diyPlan: [],
       );
 
+  factory GeminiRecommendation.fromJson(Map<String, dynamic> json) =>
+      GeminiRecommendation(
+        services: (json['services'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(ServiceRecommendation.fromJson)
+            .toList(),
+        products: (json['products'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(ProductRecommendation.fromJson)
+            .toList(),
+        diyPlan: (json['diyPlan'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(DiyStep.fromJson)
+            .toList(),
+        summary: json['summary'] as String?,
+      );
+
   Map<String, dynamic> toJson() => {
         'services': services.map((s) => s.toJson()).toList(),
         'products': products.map((p) => p.toJson()).toList(),

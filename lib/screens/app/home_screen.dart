@@ -22,9 +22,9 @@ class HomeScreen extends StatelessWidget {
           _TopBar(),
           SizedBox(height: 12),
           _GreetingRow(),
-          SizedBox(height: 12),
+          SizedBox(height: 8),
           _CenterLogo(),
-          SizedBox(height: 12),
+          SizedBox(height: 8),
           _TitleText(),
           SizedBox(height: 8),
           _PrimaryActions(),
@@ -50,16 +50,9 @@ class _TopBar extends StatelessWidget {
     final uid = AppFirebase.auth.currentUser?.uid;
     return Row(
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE4E7EC)),
-          ),
-          child: IconButton(
-            onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
-            icon: const Icon(Icons.menu_rounded),
-          ),
+        _FramedIconButton(
+          onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
+          icon: Icons.menu_rounded,
         ),
         const Spacer(),
         _CreditsIndicator(uid: uid),
@@ -136,16 +129,9 @@ class _GreetingRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _DisplayName(),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE4E7EC)),
-          ),
-          child: IconButton(
-            onPressed: () => Navigator.of(context).pushNamed('/settings'),
-            icon: const Icon(Icons.settings_outlined),
-          ),
+        _FramedIconButton(
+          onPressed: () => Navigator.of(context).pushNamed('/settings'),
+          icon: Icons.settings_outlined,
         ),
       ],
     );
@@ -158,12 +144,22 @@ class _DisplayName extends StatelessWidget {
     return StreamBuilder(
       stream: AppFirebase.auth.authStateChanges(),
       builder: (context, snap) {
-        final name = snap.data?.displayName ?? 'there';
+        final user = snap.data;
+        final isSignedIn = user != null;
+        final rawName = user?.displayName?.trim() ?? '';
+        final emailPrefix = (user?.email ?? '').split('@').first.trim();
+        final name = rawName.isNotEmpty
+            ? rawName
+            : emailPrefix.isNotEmpty
+                ? emailPrefix
+                : isSignedIn
+                    ? 'Friend'
+                    : 'Guest';
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Welcome back',
+              isSignedIn ? 'Welcome back' : 'Welcome',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -188,25 +184,22 @@ class _CenterLogo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Container(
-        width: 64,
-        height: 64,
+        width: 56,
+        height: 56,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1E1E1E), Color(0xFF545454)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
+          color: Colors.white,
+          border: Border.all(color: const Color(0xFFE4E7EC)),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(36),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
+              color: Colors.black.withAlpha(18),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
             )
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(10),
           child: Image.asset(
             'assets/clutterzen-logo-color.png',
             fit: BoxFit.contain,
@@ -241,6 +234,35 @@ class _TitleText extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FramedIconButton extends StatelessWidget {
+  const _FramedIconButton({
+    required this.onPressed,
+    required this.icon,
+  });
+
+  final VoidCallback onPressed;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: const Color(0xFFE4E7EC)),
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
       ),
     );
   }
@@ -327,13 +349,225 @@ class _SectionHeader extends StatelessWidget {
       );
 }
 
+class _Shimmer extends StatefulWidget {
+  const _Shimmer({required this.child});
+  final Widget child;
+
+  @override
+  State<_Shimmer> createState() => _ShimmerState();
+}
+
+class _ShimmerState extends State<_Shimmer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1350),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.child,
+      builder: (context, child) {
+        return ShaderMask(
+          blendMode: BlendMode.srcATop,
+          shaderCallback: (bounds) {
+            final progress = _controller.value;
+            return LinearGradient(
+              begin: Alignment(-1.2 + (2.4 * progress), -0.2),
+              end: Alignment(-0.2 + (2.4 * progress), 0.2),
+              colors: const [
+                Color(0xFFE8EBF0),
+                Color(0xFFF5F7FA),
+                Color(0xFFE8EBF0),
+              ],
+              stops: const [0.1, 0.45, 0.9],
+            ).createShader(bounds);
+          },
+          child: child!,
+        );
+      },
+    );
+  }
+}
+
+class _EmptyDataMessage extends StatelessWidget {
+  const _EmptyDataMessage({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE4E7EC)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 18, color: Color(0xFF667085)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: const Color(0xFF667085)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoriesSkeleton extends StatelessWidget {
+  const _CategoriesSkeleton({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 170,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: 3,
+            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            itemBuilder: (_, __) {
+              return _Shimmer(
+                child: Container(
+                  width: 180,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE4E7EC)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFE9EDF2),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(16),
+                              topRight: Radius.circular(16),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Container(
+                          height: 14,
+                          width: 110,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE9EDF2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        _EmptyDataMessage(message: message),
+      ],
+    );
+  }
+}
+
+class _ScansSkeleton extends StatelessWidget {
+  const _ScansSkeleton({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (int i = 0; i < 3; i++) ...[
+          _Shimmer(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE4E7EC)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE9EDF2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: 14,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE9EDF2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 12,
+                          width: 130,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE9EDF2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (i < 2) const SizedBox(height: 12),
+        ],
+        const SizedBox(height: 10),
+        _EmptyDataMessage(message: message),
+      ],
+    );
+  }
+}
+
 class _RecentCategories extends StatelessWidget {
   const _RecentCategories();
   @override
   Widget build(BuildContext context) {
     final uid = AppFirebase.auth.currentUser?.uid;
     if (uid == null) {
-      return const SizedBox.shrink();
+      return const _CategoriesSkeleton(
+        message:
+            'Analyze your first image to populate recent categories.',
+      );
     }
     final query = AppFirebase.firestore
         .collection('analyses')
@@ -344,8 +578,7 @@ class _RecentCategories extends StatelessWidget {
       stream: query.snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) {
-          return const SizedBox(
-              height: 170, child: Center(child: CircularProgressIndicator()));
+          return const _CategoriesSkeleton(message: 'Loading recent categories...');
         }
         final docs = snap.data!.docs;
         // Derive categories list from analyses' categories fields
@@ -362,6 +595,12 @@ class _RecentCategories extends StatelessWidget {
           }
         }
         final items = catToImage.entries.take(10).toList();
+        if (items.isEmpty) {
+          return const _CategoriesSkeleton(
+            message:
+                'Analyze your first image to populate recent categories.',
+          );
+        }
         return SizedBox(
           height: 170,
           child: ListView.separated(
@@ -455,7 +694,11 @@ class _RecentScansState extends State<_RecentScans> {
   @override
   Widget build(BuildContext context) {
     final uid = AppFirebase.auth.currentUser?.uid;
-    if (uid == null) return const SizedBox.shrink();
+    if (uid == null) {
+      return const _ScansSkeleton(
+        message: 'Analyze your first image to populate recent scans.',
+      );
+    }
     final query = AppFirebase.firestore
         .collection('analyses')
         .where('uid', isEqualTo: uid)
@@ -466,7 +709,7 @@ class _RecentScansState extends State<_RecentScans> {
       stream: query.snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const _ScansSkeleton(message: 'Loading recent scans...');
         }
 
         final docs = snap.data!.docs;
@@ -588,16 +831,20 @@ class _RecentScansState extends State<_RecentScans> {
             ],
             const SizedBox(height: 16),
             if (filteredDocs.isEmpty)
-              Center(
-                child: Text(
-                  'No scans found. Try a different search or filter.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: Colors.grey[600]),
-                  textAlign: TextAlign.center,
-                ),
-              )
+              combinedDocs.isEmpty
+                  ? const _ScansSkeleton(
+                      message: 'Analyze your first image to populate recent scans.',
+                    )
+                  : Center(
+                      child: Text(
+                        'No scans found. Try a different search or filter.',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: Colors.grey[600]),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
             else
               _buildScansView(context, filteredDocs),
             const SizedBox(height: 12),

@@ -1,4 +1,5 @@
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 
 import '../app_firebase.dart';
 import 'interfaces/analysis_repository.dart';
@@ -11,11 +12,12 @@ import '../models/vision_models.dart';
 import '../services/firebase_functions_service.dart';
 import 'interfaces/local_store.dart';
 import 'local/shared_prefs_store.dart';
-import 'dart:typed_data';
 import 'interfaces/gemini_provider.dart';
 import '../services/gemini_service.dart';
 import '../models/gemini_models.dart';
 import '../env.dart';
+import '../services/vision_service.dart';
+import '../services/replicate_service.dart';
 
 class BackendRegistry {
   BackendRegistry._();
@@ -29,19 +31,35 @@ class BackendRegistry {
   }
 
   static IVisionProvider visionProvider() {
-    final svc = FirebaseFunctionsService(
+    final functionsSvc = FirebaseFunctionsService(
       functionsUrl:
           Env.firebaseFunctionsUrl.isEmpty ? null : Env.firebaseFunctionsUrl,
     );
-    return _FunctionsVisionAdapter(svc);
+    final allowDirectFallback = kDebugMode &&
+        (Env.dotEnvValue('ALLOW_CLIENT_AI_FALLBACK')?.toLowerCase() == 'true');
+    final directSvc = allowDirectFallback && Env.visionApiKey.isNotEmpty
+        ? VisionService(apiKey: Env.visionApiKey)
+        : null;
+    return _ResilientVisionAdapter(
+      functionsSvc: functionsSvc,
+      directSvc: directSvc,
+    );
   }
 
   static IGenerateProvider generateProvider() {
-    final svc = FirebaseFunctionsService(
+    final functionsSvc = FirebaseFunctionsService(
       functionsUrl:
           Env.firebaseFunctionsUrl.isEmpty ? null : Env.firebaseFunctionsUrl,
     );
-    return _FunctionsGenerateAdapter(svc);
+    final allowDirectFallback = kDebugMode &&
+        (Env.dotEnvValue('ALLOW_CLIENT_AI_FALLBACK')?.toLowerCase() == 'true');
+    final directSvc = !allowDirectFallback || Env.replicateToken.isEmpty
+        ? null
+        : ReplicateService(apiToken: Env.replicateToken);
+    return _FunctionsGenerateAdapter(
+      functionsSvc: functionsSvc,
+      directSvc: directSvc,
+    );
   }
 
   static ILocalStore localStore() {
@@ -49,12 +67,19 @@ class BackendRegistry {
   }
 
   static IGeminiProvider geminiProvider() {
-    if (Env.geminiApiKey.isEmpty) {
-      throw StateError(
-          'GEMINI_API_KEY is not configured. Add it to your .env file.');
-    }
-    final svc = GeminiService(apiKey: Env.geminiApiKey);
-    return _GeminiAdapter(svc);
+    final functionsSvc = FirebaseFunctionsService(
+      functionsUrl:
+          Env.firebaseFunctionsUrl.isEmpty ? null : Env.firebaseFunctionsUrl,
+    );
+    final allowDirectFallback = kDebugMode &&
+        (Env.dotEnvValue('ALLOW_CLIENT_AI_FALLBACK')?.toLowerCase() == 'true');
+    final directSvc = !allowDirectFallback || Env.geminiApiKey.isEmpty
+        ? null
+        : GeminiService(apiKey: Env.geminiApiKey);
+    return _FunctionsGeminiAdapter(
+      functionsSvc: functionsSvc,
+      directSvc: directSvc,
+    );
   }
 }
 
@@ -100,26 +125,70 @@ class Registry {
   }
 }
 
-class _FunctionsVisionAdapter implements IVisionProvider {
-  _FunctionsVisionAdapter(this._svc);
-  final FirebaseFunctionsService _svc;
+class _ResilientVisionAdapter implements IVisionProvider {
+  _ResilientVisionAdapter({
+    required FirebaseFunctionsService functionsSvc,
+    required VisionService? directSvc,
+  })  : _functionsSvc = functionsSvc,
+        _directSvc = directSvc;
+
+  final FirebaseFunctionsService _functionsSvc;
+  final VisionService? _directSvc;
+
   @override
-  Future<VisionAnalysis> analyzeImageBytes(Uint8List bytes) =>
-      _svc.analyzeImageViaFunction(imageBytes: bytes);
+  Future<VisionAnalysis> analyzeImageBytes(Uint8List bytes) async {
+    try {
+      return await _functionsSvc.analyzeImageViaFunction(imageBytes: bytes);
+    } catch (_) {
+      final direct = _directSvc;
+      if (direct == null) rethrow;
+      return direct.analyzeImageBytes(bytes);
+    }
+  }
+
   @override
-  Future<VisionAnalysis> analyzeImageUrl(String imageUrl) =>
-      _svc.analyzeImageViaFunction(imageUrl: imageUrl);
+  Future<VisionAnalysis> analyzeImageUrl(String imageUrl) async {
+    try {
+      return await _functionsSvc.analyzeImageViaFunction(imageUrl: imageUrl);
+    } catch (_) {
+      final direct = _directSvc;
+      if (direct == null) rethrow;
+      return direct.analyzeImageUrl(imageUrl);
+    }
+  }
 }
 
 class _FunctionsGenerateAdapter implements IGenerateProvider {
-  _FunctionsGenerateAdapter(this._svc);
-  final FirebaseFunctionsService _svc;
+  _FunctionsGenerateAdapter({
+    required FirebaseFunctionsService functionsSvc,
+    required ReplicateService? directSvc,
+  })  : _functionsSvc = functionsSvc,
+        _directSvc = directSvc;
+
+  final FirebaseFunctionsService _functionsSvc;
+  final ReplicateService? _directSvc;
+
   @override
   Future<String> generateOrganizedImage({required String imageUrl}) async {
     try {
-      return await _svc.generateOrganizedImageViaFunction(imageUrl: imageUrl);
+      return await _functionsSvc.generateOrganizedImageViaFunction(
+        imageUrl: imageUrl,
+      );
     } catch (e) {
-      // Replicate failed or quota exceeded, try Gemini fallback
+      // Firebase Function unavailable/failed. Try direct Replicate client if available.
+      final direct = _directSvc;
+      if (direct != null) {
+        try {
+          return await direct.generateOrganizedImage(
+            imageUrl: imageUrl,
+            fallbackToOriginal: false,
+          );
+        } catch (_) {
+          // Continue to Gemini fallback.
+        }
+      }
+
+      // Replicate failed or quota exceeded, try Gemini fallback.
       try {
         final prompt =
             'A perfectly organized, clean and tidy version of this space, high quality, photorealistic interior design';
@@ -147,24 +216,57 @@ class _FunctionsGenerateAdapter implements IGenerateProvider {
   }
 }
 
-class _GeminiAdapter implements IGeminiProvider {
-  _GeminiAdapter(this._svc);
-  final GeminiService _svc;
+class _FunctionsGeminiAdapter implements IGeminiProvider {
+  _FunctionsGeminiAdapter({
+    required FirebaseFunctionsService functionsSvc,
+    required GeminiService? directSvc,
+  })  : _functionsSvc = functionsSvc,
+        _directSvc = directSvc;
+
+  final FirebaseFunctionsService _functionsSvc;
+  final GeminiService? _directSvc;
+
   @override
   Future<GeminiRecommendation> getRecommendations({
     String? spaceDescription,
     required List<String> detectedObjects,
     Uint8List? imageBytes,
     double? clutterScore,
-  }) =>
-      _svc.getRecommendations(
+  }) async {
+    try {
+      return await _functionsSvc.getGeminiRecommendationsViaFunction(
+        spaceDescription: spaceDescription,
+        detectedObjects: detectedObjects,
+        clutterScore: clutterScore,
+      );
+    } catch (_) {
+      final direct = _directSvc;
+      if (direct == null) return GeminiRecommendation.empty();
+      return direct.getRecommendations(
         spaceDescription: spaceDescription,
         detectedObjects: detectedObjects,
         imageBytes: imageBytes,
         clutterScore: clutterScore,
       );
+    }
+  }
 
   @override
-  Future<Uint8List?> generateImageFallback(String prompt) =>
-      _svc.generateImageFallback(prompt);
+  Future<Uint8List?> generateImageFallback(String prompt) async {
+    try {
+      final imageBytes =
+          await _functionsSvc.generateGeminiImageFallbackViaFunction(
+        prompt: prompt,
+      );
+      if (imageBytes != null && imageBytes.isNotEmpty) {
+        return imageBytes;
+      }
+    } catch (_) {
+      // Fall through to direct fallback.
+    }
+
+    final direct = _directSvc;
+    if (direct == null) return null;
+    return direct.generateImageFallback(prompt);
+  }
 }

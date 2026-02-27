@@ -10,18 +10,21 @@ class DiagnosticsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final fbInitialized = Firebase.apps.isNotEmpty;
     final user = AppFirebase.auth.currentUser;
+    final geminiConfigured =
+        Env.firebaseFunctionsUrl.isNotEmpty || Env.geminiApiKey.isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Diagnostics')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _tile('Firebase initialized', fbInitialized),
-          _tile('Signed in', user != null, trailing: user?.uid ?? '—'),
+          _tile('Signed in', user != null, trailing: user?.uid ?? '-'),
           _tile('FIREBASE_FUNCTIONS_URL set',
               Env.firebaseFunctionsUrl.isNotEmpty),
           _tile('STRIPE_PUBLISHABLE_KEY set',
               Env.stripePublishableKey.isNotEmpty),
-          _tile('GEMINI_API_KEY set', Env.geminiApiKey.isNotEmpty),
+          _tile('Gemini configured', geminiConfigured),
           _tile('GOOGLE_SERVER_CLIENT_ID set',
               Env.googleServerClientId.isNotEmpty),
           const SizedBox(height: 12),

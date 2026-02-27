@@ -17,6 +17,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       description:
           'Snap a photo of any messy space and let Universal Declutter analyze objects, clutter levels, and possibilities.',
       asset: 'assets/onboarding/step1.png',
+      imageScale: 1.25,
     ),
     _OnboardingPage(
       title: 'Get Smart Organization Tips',
@@ -29,6 +30,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       description:
           'Generate AI "after" images to preview how your space could look once everything is in its place.',
       asset: 'assets/onboarding/step3.png',
+      imageScale: 1.25,
     ),
     _OnboardingPage(
       title: 'Track Progress and Stay Motivated',
@@ -193,11 +195,13 @@ class _OnboardingPage {
     required this.title,
     required this.description,
     required this.asset,
+    this.imageScale = 1.0,
   });
 
   final String title;
   final String description;
   final String asset;
+  final double imageScale;
 }
 
 class _OnboardingCard extends StatelessWidget {
@@ -232,10 +236,13 @@ class _OnboardingCard extends StatelessWidget {
                 child: Hero(
                   tag: page.asset,
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Image.asset(
-                      page.asset,
-                      fit: BoxFit.contain,
+                    padding: const EdgeInsets.all(8),
+                    child: Transform.scale(
+                      scale: page.imageScale,
+                      child: Image.asset(
+                        page.asset,
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                 ),

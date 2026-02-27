@@ -65,6 +65,7 @@ md_files(temp)
 
 # Platform-specific ephemeral directories
 ios/Flutter/.last_build_id
+ios/Runner.xcodeproj/project.pbxproj
 linux/flutter/ephemeral/
 macos/Flutter/ephemeral/
 windows/flutter/ephemeral/

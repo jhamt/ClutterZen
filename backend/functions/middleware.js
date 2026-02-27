@@ -58,7 +58,7 @@ const optionalAuthenticate = async (req, res, next) => {
       try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
         req.user = decodedToken;
-      } catch (error) {
+      } catch {
         // Token invalid, but continue without user
         req.user = null;
       }
@@ -67,7 +67,7 @@ const optionalAuthenticate = async (req, res, next) => {
     }
     
     next();
-  } catch (error) {
+  } catch {
     req.user = null;
     next();
   }

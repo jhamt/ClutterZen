@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../models/vision_models.dart';
+import '../models/gemini_models.dart';
 import '../app_firebase.dart';
 import '../env.dart';
 import 'vision_error_handler.dart';
@@ -291,6 +292,88 @@ class FirebaseFunctionsService {
       return outputUrl;
     } catch (e) {
       throw Exception('Replicate generation via Firebase Function failed: $e');
+    }
+  }
+
+  /// Call Gemini recommendation endpoint via Firebase Cloud Function.
+  Future<GeminiRecommendation> getGeminiRecommendationsViaFunction({
+    String? spaceDescription,
+    required List<String> detectedObjects,
+    double? clutterScore,
+  }) async {
+    try {
+      final idToken = await _getIdToken();
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+      };
+      if (idToken != null) {
+        headers['Authorization'] = 'Bearer $idToken';
+      }
+
+      final response = await _client
+          .post(
+            Uri.parse('$_baseUrl/gemini/recommend'),
+            headers: headers,
+            body: jsonEncode({
+              'spaceDescription': spaceDescription,
+              'detectedObjects': detectedObjects,
+              'clutterScore': clutterScore,
+            }),
+          )
+          .timeout(const Duration(seconds: 45));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Gemini recommendation failed: ${response.statusCode} ${response.body}');
+      }
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = decoded['data'];
+      if (data is! Map<String, dynamic>) {
+        throw Exception('Gemini recommendation response missing data object');
+      }
+      return GeminiRecommendation.fromJson(data);
+    } catch (e) {
+      throw Exception('Gemini recommendation via Firebase Function failed: $e');
+    }
+  }
+
+  /// Call Gemini image fallback endpoint via Firebase Cloud Function.
+  Future<Uint8List?> generateGeminiImageFallbackViaFunction({
+    required String prompt,
+  }) async {
+    try {
+      final idToken = await _getIdToken();
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+      };
+      if (idToken != null) {
+        headers['Authorization'] = 'Bearer $idToken';
+      }
+
+      final response = await _client
+          .post(
+            Uri.parse('$_baseUrl/gemini/image-fallback'),
+            headers: headers,
+            body: jsonEncode({'prompt': prompt}),
+          )
+          .timeout(const Duration(seconds: 120));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Gemini image fallback failed: ${response.statusCode} ${response.body}');
+      }
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = decoded['data'];
+      if (data is! Map<String, dynamic>) {
+        throw Exception('Gemini image fallback response missing data object');
+      }
+      final base64Image = data['imageBase64']?.toString();
+      if (base64Image == null || base64Image.isEmpty) return null;
+      return base64Decode(base64Image);
+    } catch (e) {
+      throw Exception('Gemini image fallback via Firebase Function failed: $e');
     }
   }
 }

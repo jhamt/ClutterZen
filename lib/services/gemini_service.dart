@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
@@ -14,11 +13,19 @@ class GeminiService {
   GeminiService({required String apiKey}) : _apiKey = apiKey;
 
   final String _apiKey;
-  // Prioritized list of models to try
-  static const List<String> _modelHierarchy = [
+  // Prioritized text models for recommendations.
+  static const List<String> _textModelHierarchy = [
     'gemini-3-pro-preview', // Primary: Latest Pro (High Intelligence)
     'gemini-3-flash-preview', // Fallback 1: Latest Flash (Speed/Efficiency)
-    'gemini-flash-lite-latest', // Fallback 2: Flash Lite (Low latency/Cost effective)
+    'gemini-2.5-flash-lite', // Fallback 2: Lower latency/cost
+    'gemini-2.5-flash', // Fallback 3: Broadly available
+  ];
+
+  // Prioritized image-capable models for organized image fallback.
+  static const List<String> _imageModelHierarchy = [
+    'nano-banana-pro-preview',
+    'gemini-3-pro-image-preview',
+    'gemini-2.5-flash-image',
   ];
 
   /// Analyzes detected objects and returns recommendations.
@@ -38,7 +45,7 @@ class GeminiService {
       clutterScore: clutterScore,
     );
 
-    for (final modelName in _modelHierarchy) {
+    for (final modelName in _textModelHierarchy) {
       try {
         final model = GenerativeModel(
           model: modelName,
@@ -69,8 +76,7 @@ class GeminiService {
           return _parseResponse(text);
         }
       } catch (e) {
-        // Log the failure for this specific model but continue to the next one
-        // In a real app, you might send this to Crashlytics
+        debugPrint('Gemini text model failed ($modelName): $e');
         continue;
       }
     }
@@ -84,11 +90,34 @@ class GeminiService {
     );
   }
 
-  /// Generates an image using Gemini (gemini-2.5-flash-image) as a fallback
+  /// Generates an image using Gemini image-capable models as a fallback.
+  ///
+  /// Tries Nano Banana first when available, then other image models.
   Future<Uint8List?> generateImageFallback(String prompt) async {
+    for (final modelName in _imageModelHierarchy) {
+      try {
+        final bytes = await _generateImageWithModel(
+          modelName: modelName,
+          prompt: prompt,
+        );
+        if (bytes != null && bytes.isNotEmpty) {
+          debugPrint('Gemini image generation succeeded with $modelName');
+          return bytes;
+        }
+      } catch (e) {
+        debugPrint('Gemini image model failed ($modelName): $e');
+      }
+    }
+    return null;
+  }
+
+  Future<Uint8List?> _generateImageWithModel({
+    required String modelName,
+    required String prompt,
+  }) async {
     try {
       final url = Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=$_apiKey');
+          'https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$_apiKey');
 
       final response = await http.post(
         url,
@@ -101,36 +130,58 @@ class GeminiService {
                 {"text": prompt}
               ]
             }
-          ]
+          ],
+          'generationConfig': {
+            'responseModalities': ['TEXT', 'IMAGE']
+          }
         }),
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final candidates = data['candidates'] as List<dynamic>?;
-        if (candidates != null && candidates.isNotEmpty) {
-          final parts = candidates.first['content']?['parts'] as List<dynamic>?;
-          if (parts != null && parts.isNotEmpty) {
-            for (final part in parts) {
-              if (part['inlineData'] != null) {
-                final base64Image = part['inlineData']['data'] as String?;
-                if (base64Image != null) {
-                  return base64Decode(base64Image);
-                }
-              }
-            }
-          }
-        }
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return _extractInlineImageBytes(data);
       } else {
         debugPrint(
-            'Gemini API Error: ${response.statusCode} - ${response.body}');
+            'Gemini image model $modelName error (${response.statusCode}): ${_preview(response.body)}');
       }
       return null;
     } catch (e) {
-      debugPrint('Gemini API Exception: $e');
-      // In case of error (network, quota, etc.), just return null so it falls back gracefully
+      debugPrint('Gemini image request exception ($modelName): $e');
       return null;
     }
+  }
+
+  Uint8List? _extractInlineImageBytes(Map<String, dynamic> data) {
+    final candidates = data['candidates'] as List<dynamic>? ?? const [];
+    for (final rawCandidate in candidates) {
+      final candidate = rawCandidate as Map<String, dynamic>;
+      final content = candidate['content'] as Map<String, dynamic>?;
+      final parts = content?['parts'] as List<dynamic>? ?? const [];
+      for (final rawPart in parts) {
+        final part = rawPart as Map<String, dynamic>;
+        final dynamic inlineDataRaw =
+            part['inlineData'] ?? part['inline_data'];
+        if (inlineDataRaw is! Map<String, dynamic>) continue;
+
+        final mimeType =
+            (inlineDataRaw['mimeType'] ?? inlineDataRaw['mime_type'])
+                ?.toString();
+        final payload = inlineDataRaw['data']?.toString();
+        if (payload == null || payload.isEmpty) continue;
+        if (mimeType != null && !mimeType.startsWith('image/')) continue;
+        try {
+          return base64Decode(payload);
+        } catch (_) {
+          continue;
+        }
+      }
+    }
+    return null;
+  }
+
+  String _preview(String body) {
+    if (body.length <= 220) return body;
+    return '${body.substring(0, 220)}...';
   }
 
   String _buildPrompt({

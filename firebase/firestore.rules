@@ -57,8 +57,18 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.organizedImageUrl is string
+        && (!('organizedRegensUsed' in request.resource.data) ||
+            (request.resource.data.organizedRegensUsed is int &&
+             request.resource.data.organizedRegensUsed >= 0 &&
+             request.resource.data.organizedRegensUsed <= 5))
+        && (!('organizedImageUpdatedAt' in request.resource.data) ||
+             request.resource.data.organizedImageUpdatedAt is timestamp)
         && request.resource.data.diff(resource.data).changedKeys()
-            .hasOnly(['organizedImageUrl']);
+            .hasOnly([
+              'organizedImageUrl',
+              'organizedRegensUsed',
+              'organizedImageUpdatedAt',
+            ]);
       allow delete: if false;
     }
     

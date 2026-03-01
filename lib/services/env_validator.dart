@@ -4,9 +4,6 @@ import '../env.dart';
 
 /// Service for validating environment variables and configuration.
 class EnvValidator {
-  static const String _defaultFunctionsUrl =
-      'https://us-central1-clutterzen-test.cloudfunctions.net/api';
-
   /// Validate all required/recommended environment variables.
   ///
   /// Returns a list of issues and warnings.
@@ -17,11 +14,23 @@ class EnvValidator {
     final functionsUrl = Env.firebaseFunctionsUrl.trim();
     if (functionsUrl.isEmpty) {
       issues.add(
-        'FIREBASE_FUNCTIONS_URL is not set (recommended; app falls back to default endpoint).',
+        'FIREBASE_FUNCTIONS_URL is not set (required for server-side analysis and credit operations).',
       );
-    } else if (functionsUrl == _defaultFunctionsUrl) {
+    } else {
+      final functionsUri = Uri.tryParse(functionsUrl);
+      final isValid = functionsUri != null &&
+          (functionsUri.isScheme('https') || functionsUri.isScheme('http')) &&
+          functionsUri.host.isNotEmpty;
+      if (!isValid) {
+        issues.add(
+          'FIREBASE_FUNCTIONS_URL appears invalid (must be a full http/https URL).',
+        );
+      }
+    }
+
+    if (functionsUrl.contains('clutterzen-test.cloudfunctions.net')) {
       issues.add(
-        'FIREBASE_FUNCTIONS_URL is using default test endpoint (set your own project URL for production).',
+        'FIREBASE_FUNCTIONS_URL points to legacy test host (use your deployed project URL).',
       );
     }
 

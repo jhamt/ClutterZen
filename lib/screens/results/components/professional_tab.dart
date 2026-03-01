@@ -7,10 +7,13 @@ import '../../../models/vision_models.dart';
 import '../../../services/professional_service_provider.dart';
 import '../../payment/book_service_screen.dart';
 
+import '../../../services/i18n_service.dart';
+
 class ProfessionalTab extends StatefulWidget {
-  const ProfessionalTab({super.key, this.analysis});
+  const ProfessionalTab({super.key, this.analysis, this.embedded = false});
 
   final VisionAnalysis? analysis;
+  final bool embedded;
 
   @override
   State<ProfessionalTab> createState() => _ProfessionalTabState();
@@ -35,8 +38,9 @@ class _ProfessionalTabState extends State<ProfessionalTab> {
     if (widget.analysis != null) {
       try {
         // Calculate approximate clutter score from object count
-        final clutterScore = (widget.analysis!.objects.length * 10.0).clamp(0.0, 100.0);
-        
+        final clutterScore =
+            (widget.analysis!.objects.length * 10.0).clamp(0.0, 100.0);
+
         final geminiRecs = await Registry.gemini.getRecommendations(
           detectedObjects: widget.analysis!.objects.map((o) => o.name).toList(),
           spaceDescription: 'Cluttered space requiring professional help',
@@ -80,12 +84,18 @@ class _ProfessionalTabState extends State<ProfessionalTab> {
         final professionals = snapshot.data ?? [];
 
         if (professionals.isEmpty) {
-          return const Center(
-            child: Text('No professional services available'),
+          return Center(
+            child: Text(
+                I18nService.translate("No professional services available")),
           );
         }
 
         return ListView.builder(
+          shrinkWrap: widget.embedded,
+          primary: !widget.embedded,
+          physics: widget.embedded
+              ? const NeverScrollableScrollPhysics()
+              : const BouncingScrollPhysics(),
           padding: const EdgeInsets.all(12),
           itemCount: professionals.length,
           itemBuilder: (context, index) {
@@ -212,7 +222,7 @@ class _ProfessionalCard extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: () => _bookService(context, professional),
                   icon: const Icon(Icons.book_online, size: 18),
-                  label: const Text('Book Service'),
+                  label: Text(I18nService.translate("Book Service")),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     backgroundColor: Colors.green,
@@ -227,7 +237,7 @@ class _ProfessionalCard extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () => _callPhone(professional.phone),
                     icon: const Icon(Icons.phone, size: 18),
-                    label: const Text('Call'),
+                    label: Text(I18nService.translate("Call")),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -238,7 +248,7 @@ class _ProfessionalCard extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () => _sendEmail(professional.email),
                     icon: const Icon(Icons.email, size: 18),
-                    label: const Text('Email'),
+                    label: Text(I18nService.translate("Email")),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -253,7 +263,7 @@ class _ProfessionalCard extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: () => _openWebsite(professional.website!),
                   icon: const Icon(Icons.language, size: 18),
-                  label: const Text('Visit Website'),
+                  label: Text(I18nService.translate("Visit Website")),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -297,8 +307,8 @@ class _ProfessionalCard extends StatelessWidget {
 
     if (result == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Service booked successfully!'),
+        SnackBar(
+          content: Text(I18nService.translate("Service booked successfully!")),
           backgroundColor: Colors.green,
         ),
       );

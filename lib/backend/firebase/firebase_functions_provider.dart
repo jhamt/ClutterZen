@@ -33,8 +33,10 @@ class FirebaseFunctionsGenerateProvider implements IGenerateProvider {
   final FirebaseFunctionsService _service;
 
   @override
-  Future<String> generateOrganizedImage({required String imageUrl}) async {
+  Future<String> generateOrganizedImage({
+    required String imageUrl,
+    bool allowFallback = true,
+  }) async {
     return _service.generateOrganizedImageViaFunction(imageUrl: imageUrl);
   }
 }
-

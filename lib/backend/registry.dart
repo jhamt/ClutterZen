@@ -169,7 +169,17 @@ class _FunctionsGenerateAdapter implements IGenerateProvider {
   final ReplicateService? _directSvc;
 
   @override
-  Future<String> generateOrganizedImage({required String imageUrl}) async {
+  Future<String> generateOrganizedImage({
+    required String imageUrl,
+    bool allowFallback = true,
+  }) async {
+    if (!allowFallback) {
+      // Strict mode for manual regenerate actions.
+      return _functionsSvc.generateOrganizedImageViaFunction(
+        imageUrl: imageUrl,
+      );
+    }
+
     try {
       return await _functionsSvc.generateOrganizedImageViaFunction(
         imageUrl: imageUrl,

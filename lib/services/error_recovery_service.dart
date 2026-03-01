@@ -2,10 +2,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'connectivity_service.dart';
+import 'functions_endpoint.dart';
 import 'vision_error_handler.dart';
 
 /// Comprehensive error recovery service
-/// 
+///
 /// Handles:
 /// - Network error recovery
 /// - Offline operation queuing
@@ -14,7 +15,40 @@ import 'vision_error_handler.dart';
 class ErrorRecoveryService {
   /// Recovery strategy for different error types
   static RecoveryStrategy getRecoveryStrategy(dynamic error) {
+    if (error is FunctionsConfigException) {
+      return RecoveryStrategy.fail;
+    }
+
+    if (error is FunctionsRequestException) {
+      final statusCode = error.statusCode ?? 0;
+      if (statusCode == 401 || statusCode == 403) {
+        return RecoveryStrategy.requireReauth;
+      }
+      if (statusCode == 404) {
+        return RecoveryStrategy.fail;
+      }
+      if (statusCode >= 500 || statusCode == 408) {
+        return RecoveryStrategy.retryWithBackoff;
+      }
+      if (statusCode == 0) {
+        if (!connectivityService.isConnected) {
+          return RecoveryStrategy.queueForOffline;
+        }
+        return RecoveryStrategy.retryWithBackoff;
+      }
+      return RecoveryStrategy.fail;
+    }
+
     if (error is VisionApiError) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        return RecoveryStrategy.requireReauth;
+      }
+      if (error.statusCode == 0) {
+        if (!connectivityService.isConnected) {
+          return RecoveryStrategy.queueForOffline;
+        }
+        return RecoveryStrategy.retryWithBackoff;
+      }
       if (error.isRateLimit) {
         return RecoveryStrategy.retryWithBackoff;
       }
@@ -28,7 +62,7 @@ class ErrorRecoveryService {
     }
 
     final errorString = error.toString().toLowerCase();
-    
+
     // Network errors
     if (errorString.contains('network') ||
         errorString.contains('socket') ||
@@ -64,7 +98,7 @@ class ErrorRecoveryService {
   }
 
   /// Attempt to recover from an error
-  /// 
+  ///
   /// Returns true if recovery was attempted, false if error should be thrown
   static Future<bool> attemptRecovery({
     required dynamic error,
@@ -127,7 +161,8 @@ class ErrorRecoveryService {
         );
 
         if (kDebugMode) {
-          debugPrint('Retry attempt $attempt failed, waiting ${delay.inSeconds}s before retry...');
+          debugPrint(
+              'Retry attempt $attempt failed, waiting ${delay.inSeconds}s before retry...');
         }
 
         await Future.delayed(delay);
@@ -139,7 +174,8 @@ class ErrorRecoveryService {
   /// Check if error is recoverable
   static bool isRecoverable(dynamic error) {
     final strategy = getRecoveryStrategy(error);
-    return strategy != RecoveryStrategy.fail && strategy != RecoveryStrategy.requireReauth;
+    return strategy != RecoveryStrategy.fail &&
+        strategy != RecoveryStrategy.requireReauth;
   }
 
   /// Get user-friendly recovery message
@@ -151,7 +187,7 @@ class ErrorRecoveryService {
         if (!connectivityService.isConnected) {
           return 'No internet connection. Please check your network and try again.';
         }
-        return 'Temporary error. Retrying...';
+        return 'Temporary service issue. Please try again in a moment.';
 
       case RecoveryStrategy.queueForOffline:
         return 'No internet connection. Your request will be saved and synced when you\'re back online.';
@@ -160,11 +196,38 @@ class ErrorRecoveryService {
         return 'Please sign in again to continue.';
 
       case RecoveryStrategy.fail:
+        if (error is FunctionsConfigException) {
+          return error.message;
+        }
+        if (error is FunctionsRequestException) {
+          return error.message;
+        }
         if (error is VisionApiError) {
           return VisionErrorHandler.getUserFriendlyMessage(error);
         }
-        return 'An error occurred. Please try again.';
+        final message = _extractReadableError(error);
+        return message.isEmpty
+            ? 'An error occurred. Please try again.'
+            : message;
     }
+  }
+
+  static String _extractReadableError(dynamic error) {
+    final raw = error?.toString() ?? '';
+    if (raw.trim().isEmpty) return '';
+    final cleaned = raw
+        .replaceAll(RegExp(r'^Exception:\s*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'^Error:\s*', caseSensitive: false), '')
+        .trim();
+
+    if (cleaned.toLowerCase() == 'null') return '';
+
+    if (cleaned.contains('SocketException') ||
+        cleaned.toLowerCase().contains('network is unreachable')) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+
+    return cleaned.length > 240 ? '${cleaned.substring(0, 240)}...' : cleaned;
   }
 }
 
@@ -182,4 +245,3 @@ enum RecoveryStrategy {
   /// Fail immediately (non-recoverable)
   fail,
 }
-

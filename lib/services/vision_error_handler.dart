@@ -11,11 +11,11 @@ class VisionErrorHandler {
     if (statusCode == 408) return true; // Request timeout
     if (statusCode == 503) return true; // Service unavailable
     if (statusCode == 504) return true; // Gateway timeout
-    
+
     // Check for specific Google API error codes
     if (errorCode != null) {
       final lowerCode = errorCode.toLowerCase();
-      if (lowerCode.contains('rate') || 
+      if (lowerCode.contains('rate') ||
           lowerCode.contains('quota') ||
           lowerCode.contains('unavailable') ||
           lowerCode.contains('timeout') ||
@@ -24,7 +24,7 @@ class VisionErrorHandler {
         return true;
       }
     }
-    
+
     return false;
   }
 
@@ -35,9 +35,9 @@ class VisionErrorHandler {
       // Check if it's a quota error
       if (errorCode != null) {
         final lowerCode = errorCode.toLowerCase();
-        return lowerCode.contains('quota') || 
-               lowerCode.contains('rate') ||
-               lowerCode.contains('exceeded');
+        return lowerCode.contains('quota') ||
+            lowerCode.contains('rate') ||
+            lowerCode.contains('exceeded');
       }
     }
     return false;
@@ -61,45 +61,86 @@ class VisionErrorHandler {
   /// Parses error details from Google Vision API response
   static VisionApiError? parseErrorResponse(http.Response response) {
     try {
-      final body = jsonDecode(response.body) as Map<String, dynamic>?;
-      if (body == null) return null;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        return VisionApiError(
+          statusCode: response.statusCode,
+          message: _safeSnippet(response.body),
+          isRetryable: isRetryableError(response.statusCode),
+          isRateLimit: isRateLimitError(response.statusCode),
+        );
+      }
 
-      final error = body['error'] as Map<String, dynamic>?;
-      if (error == null) return null;
-
-      final code = error['code'] as int? ?? response.statusCode;
-      final message = error['message'] as String? ?? 'Unknown error';
-      final status = error['status'] as String?;
-      final details = error['details'] as List<dynamic>?;
-
+      final rawError = decoded['error'];
+      int code = response.statusCode;
+      String message = '';
+      String? status;
       String? errorCode;
       String? errorReason;
-      
-      if (details != null && details.isNotEmpty) {
-        for (final detail in details) {
-          if (detail is Map<String, dynamic>) {
-            errorCode ??= detail['@type'] as String?;
-            errorReason ??= detail['reason'] as String?;
+
+      if (rawError is Map<String, dynamic>) {
+        code = (rawError['code'] as int?) ?? response.statusCode;
+        message = (rawError['message'] as String?) ?? '';
+        status = rawError['status'] as String?;
+
+        final details = rawError['details'] as List<dynamic>?;
+        if (details != null) {
+          for (final detail in details) {
+            if (detail is Map<String, dynamic>) {
+              errorCode ??= detail['@type'] as String?;
+              errorReason ??= detail['reason'] as String?;
+            }
           }
+        }
+      } else if (rawError is String) {
+        message = rawError;
+      } else if (decoded['message'] is String) {
+        message = decoded['message'] as String;
+      }
+
+      if (message.trim().isEmpty) {
+        message = _safeSnippet(response.body);
+      }
+
+      // Some function responses wrap upstream JSON inside a string "error".
+      // Try to extract the nested message for clearer user feedback.
+      if (message.startsWith('{') && message.contains('"error"')) {
+        try {
+          final nested = jsonDecode(message);
+          if (nested is Map<String, dynamic>) {
+            final nestedError = nested['error'];
+            if (nestedError is Map<String, dynamic>) {
+              message = (nestedError['message'] as String?) ?? message;
+              errorCode ??= nestedError['status'] as String?;
+              errorReason ??= nestedError['code']?.toString();
+            } else if (nestedError is String && nestedError.trim().isNotEmpty) {
+              message = nestedError;
+            }
+          }
+        } catch (_) {
+          // Keep the original message when nested parsing fails.
         }
       }
 
+      final normalizedMessage = message
+          .replaceAll(RegExp(r'^Exception:\s*', caseSensitive: false), '')
+          .trim();
+
       return VisionApiError(
         statusCode: code,
-        message: message,
+        message:
+            normalizedMessage.isEmpty ? 'Unknown error' : normalizedMessage,
         status: status,
         errorCode: errorCode,
         errorReason: errorReason,
         isRetryable: isRetryableError(code, errorCode: errorCode),
         isRateLimit: isRateLimitError(code, errorCode: errorCode),
       );
-    } catch (e) {
-      // If parsing fails, return basic error
+    } catch (_) {
+      // If parsing fails, return basic error.
       return VisionApiError(
         statusCode: response.statusCode,
-        message: response.body.isNotEmpty 
-            ? response.body.substring(0, response.body.length.clamp(0, 200))
-            : 'Unknown error',
+        message: _safeSnippet(response.body),
         isRetryable: isRetryableError(response.statusCode),
         isRateLimit: isRateLimitError(response.statusCode),
       );
@@ -115,17 +156,19 @@ class VisionErrorHandler {
   }) {
     // Exponential backoff: baseDelay * 2^(attempt-1)
     final exponentialDelay = baseDelay.inMilliseconds * (1 << (attempt - 1));
-    
+
     // Cap at max delay
     final cappedDelay = exponentialDelay.clamp(
       baseDelay.inMilliseconds,
       (maxDelaySeconds * 1000).toInt(),
     );
-    
-    // Add jitter (±10% random variation) to prevent thundering herd
-    final jitter = (cappedDelay * jitterFactor * (0.5 - (DateTime.now().millisecond % 1000) / 1000));
+
+    // Add jitter (+/-10% random variation) to prevent thundering herd
+    final jitter = (cappedDelay *
+        jitterFactor *
+        (0.5 - (DateTime.now().millisecond % 1000) / 1000));
     final finalDelay = (cappedDelay + jitter).round();
-    
+
     return Duration(milliseconds: finalDelay);
   }
 
@@ -134,7 +177,7 @@ class VisionErrorHandler {
     if (error.isRateLimit) {
       return 'Too many requests. Please wait a moment and try again.';
     }
-    
+
     switch (error.statusCode) {
       case 400:
         return 'Invalid image. Please try a different photo.';
@@ -157,10 +200,16 @@ class VisionErrorHandler {
       case 504:
         return 'Service temporarily unavailable. Please try again in a moment.';
       default:
-        return error.message.isNotEmpty 
-            ? error.message 
+        return error.message.isNotEmpty
+            ? error.message
             : 'An error occurred. Please try again.';
     }
+  }
+
+  static String _safeSnippet(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return 'Unknown error';
+    return trimmed.substring(0, trimmed.length.clamp(0, 260));
   }
 }
 
@@ -236,4 +285,3 @@ class RetryConfig {
     retryOnTimeout: true,
   );
 }
-

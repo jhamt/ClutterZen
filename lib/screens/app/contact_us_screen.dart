@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app_firebase.dart';
 import '../../services/analytics_service.dart';
 import '../../services/contact_service.dart';
+import '../../services/i18n_service.dart';
 
 class ContactUsScreen extends StatefulWidget {
   const ContactUsScreen({super.key});
@@ -58,8 +59,9 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Thank you! We\'ll get back to you within 1-2 business days.'),
+          SnackBar(
+            content: Text(I18nService.translate(
+                "Thank you! We'll get back to you within 1-2 business days.")),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 4),
           ),
@@ -75,7 +77,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text('${I18nService.translate("Error")}: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -90,7 +92,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Contact Us')),
+      appBar: AppBar(title: Text(I18nService.translate("Contact Us"))),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -100,11 +102,11 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             const SizedBox(height: 12),
             _ContactField(
               controller: _nameController,
-              hint: 'Name',
+              hint: I18nService.translate("Name"),
               keyboardType: TextInputType.name,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your name';
+                  return I18nService.translate("Please enter your name");
                 }
                 return null;
               },
@@ -112,14 +114,14 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             const SizedBox(height: 8),
             _ContactField(
               controller: _emailController,
-              hint: 'Email',
+              hint: I18nService.translate("Email"),
               keyboardType: TextInputType.emailAddress,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your email';
+                  return I18nService.translate("Please enter your email");
                 }
                 if (!value.contains('@')) {
-                  return 'Please enter a valid email';
+                  return I18nService.translate("Please enter a valid email");
                 }
                 return null;
               },
@@ -127,15 +129,16 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             const SizedBox(height: 8),
             _ContactField(
               controller: _messageController,
-              hint: 'Message',
+              hint: I18nService.translate("Message"),
               keyboardType: TextInputType.multiline,
               maxLines: 6,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a message';
+                  return I18nService.translate("Please enter a message");
                 }
                 if (value.trim().length < 10) {
-                  return 'Message must be at least 10 characters';
+                  return I18nService.translate(
+                      "Message must be at least 10 characters");
                 }
                 return null;
               },
@@ -169,7 +172,8 @@ class _ResponseTimeBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'We usually reply within 1-2 business days',
+              I18nService.translate(
+                  "We usually reply within 1-2 business days"),
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
@@ -239,7 +243,7 @@ class _SubmitButton extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
               ),
             )
-          : const Text('Send Message'),
+          : Text(I18nService.translate("Send Message")),
     );
   }
 }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../backend/registry.dart';
 import '../../backend/interfaces/local_store.dart';
 
+import '../../services/i18n_service.dart';
+
 class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
 
@@ -46,7 +48,7 @@ class _NotificationSettingsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
+      appBar: AppBar(title: Text(I18nService.translate("Notifications"))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -63,15 +65,17 @@ class _NotificationSettingsScreenState
                     const SizedBox(width: 8),
                     Expanded(
                         child: Text(
-                            'Stay updated with decluttering tips and scan results',
+                            I18nService.translate(
+                                "Stay updated with decluttering tips and scan results"),
                             style: Theme.of(context).textTheme.bodyMedium))
                   ]),
                 ),
                 const SizedBox(height: 12),
                 Card(
                   child: SwitchListTile(
-                    title: const Text('Push Notifications'),
-                    subtitle: const Text('Receive updates on your device'),
+                    title: Text(I18nService.translate("Push Notifications")),
+                    subtitle: Text(I18nService.translate(
+                        "Receive updates on your device")),
                     value: _push,
                     onChanged: (v) async {
                       setState(() => _push = v);
@@ -82,8 +86,9 @@ class _NotificationSettingsScreenState
                 const SizedBox(height: 8),
                 Card(
                   child: SwitchListTile(
-                    title: const Text('Email Updates'),
-                    subtitle: const Text('Get summaries via email'),
+                    title: Text(I18nService.translate("Email Updates")),
+                    subtitle:
+                        Text(I18nService.translate("Get summaries via email")),
                     value: _email,
                     onChanged: (v) async {
                       setState(() => _email = v);
@@ -94,8 +99,9 @@ class _NotificationSettingsScreenState
                 const SizedBox(height: 8),
                 Card(
                   child: SwitchListTile(
-                    title: const Text('Tips & Tricks'),
-                    subtitle: const Text('Weekly organization tips'),
+                    title: Text(I18nService.translate("Tips & Tricks")),
+                    subtitle:
+                        Text(I18nService.translate("Weekly organization tips")),
                     value: _tips,
                     onChanged: (v) async {
                       setState(() => _tips = v);

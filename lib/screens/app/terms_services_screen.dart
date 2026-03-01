@@ -37,8 +37,9 @@ class TermsServicesScreen extends StatelessWidget {
                 indicatorSize: TabBarIndicatorSize.tab,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.black54,
+                dividerColor: Colors.transparent,
                 indicator: BoxDecoration(
-                  color: Colors.green,
+                  color: Colors.black,
                   borderRadius: BorderRadius.all(Radius.circular(12)),
                 ),
                 tabs: [
@@ -185,7 +186,8 @@ class _PrivacyTab extends StatelessWidget {
     ),
     const _SectionData(
       title: 'Data Sharing',
-      body: 'We do not sell or trade your personal information. Sharing occurs only:',
+      body:
+          'We do not sell or trade your personal information. Sharing occurs only:',
       bullets: [
         'With your explicit consent',
         'To comply with legal obligations',

@@ -5,6 +5,8 @@ import '../../models/subscription_plan.dart';
 import '../../services/user_service.dart';
 import '../payment/checkout_screen.dart';
 
+import '../../services/i18n_service.dart';
+
 class PricingScreen extends StatefulWidget {
   const PricingScreen({super.key});
 
@@ -57,7 +59,7 @@ class _PricingScreenState extends State<PricingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pricing')),
+      appBar: AppBar(title: Text(I18nService.translate("Pricing"))),
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemBuilder: (context, index) {
@@ -93,7 +95,9 @@ class _PricingScreenState extends State<PricingScreen> {
     final uid = AppFirebase.auth.currentUser?.uid;
     if (uid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to manage your plan.')),
+        SnackBar(
+            content: Text(
+                I18nService.translate("Please sign in to manage your plan."))),
       );
       return;
     }
@@ -101,7 +105,9 @@ class _PricingScreenState extends State<PricingScreen> {
     // If it's the current plan, do nothing
     if (plan.id == _currentPlanId) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('You are already on the ${plan.name} plan.')),
+        SnackBar(
+            content: Text(
+                '${I18nService.translate("You are already on the")} ${plan.name} ${I18nService.translate("plan.")}')),
       );
       return;
     }
@@ -119,7 +125,8 @@ class _PricingScreenState extends State<PricingScreen> {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${plan.name} plan activated successfully!'),
+            content: Text(
+                '${plan.name} ${I18nService.translate("plan activated successfully!")}'),
             backgroundColor: Colors.black,
           ),
         );
@@ -131,7 +138,9 @@ class _PricingScreenState extends State<PricingScreen> {
       await _loadCurrentPlan();
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${plan.name} plan activated.')),
+        SnackBar(
+            content: Text(
+                '${plan.name} ${I18nService.translate("plan activated.")}')),
       );
     }
   }
@@ -199,8 +208,8 @@ class _PlanCard extends StatelessWidget {
                     color: const Color(0xFF111111),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
-                    'Best Value',
+                  child: Text(
+                    I18nService.translate("Best Value"),
                     style: TextStyle(color: Colors.white),
                   ),
                 ),
@@ -250,7 +259,7 @@ class _PlanCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Current Plan'),
+              child: Text(I18nService.translate("Current Plan")),
             )
           else if (plan.name == 'Free')
             OutlinedButton(
@@ -261,7 +270,7 @@ class _PlanCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Select Free'),
+              child: Text(I18nService.translate("Select Free")),
             )
           else
             ElevatedButton(
@@ -274,7 +283,7 @@ class _PlanCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Upgrade'),
+              child: Text(I18nService.translate("Upgrade")),
             ),
         ],
       ),

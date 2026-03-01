@@ -12,7 +12,8 @@ class AnalysisRepository {
   Future<void> saveAnalysis(
       {required String imageUrl,
       required VisionAnalysis analysis,
-      String? organizedImageUrl}) async {
+      String? organizedImageUrl,
+      int organizedRegensUsed = 0}) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Not signed in');
     final clutter =
@@ -41,9 +42,11 @@ class AnalysisRepository {
               })
           .toList(),
       'createdAt': FieldValue.serverTimestamp(),
+      'organizedRegensUsed': organizedRegensUsed,
     };
     if (organizedImageUrl != null && organizedImageUrl.isNotEmpty) {
       data['organizedImageUrl'] = organizedImageUrl;
+      data['organizedImageUpdatedAt'] = FieldValue.serverTimestamp();
     }
     await _db.collection('analyses').add(data);
   }
@@ -51,7 +54,8 @@ class AnalysisRepository {
   Future<String> saveAnalysisAndReturnId(
       {required String imageUrl,
       required VisionAnalysis analysis,
-      String? organizedImageUrl}) async {
+      String? organizedImageUrl,
+      int organizedRegensUsed = 0}) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Not signed in');
     final clutter =
@@ -80,9 +84,11 @@ class AnalysisRepository {
               })
           .toList(),
       'createdAt': FieldValue.serverTimestamp(),
+      'organizedRegensUsed': organizedRegensUsed,
     };
     if (organizedImageUrl != null && organizedImageUrl.isNotEmpty) {
       data['organizedImageUrl'] = organizedImageUrl;
+      data['organizedImageUpdatedAt'] = FieldValue.serverTimestamp();
     }
     final ref = await _db.collection('analyses').add(data);
     return ref.id;
@@ -94,6 +100,18 @@ class AnalysisRepository {
         .collection('analyses')
         .doc(docId)
         .update({'organizedImageUrl': organizedImageUrl});
+  }
+
+  Future<void> updateOrganizedImageMetadata({
+    required String docId,
+    required String organizedImageUrl,
+    required int organizedRegensUsed,
+  }) async {
+    await _db.collection('analyses').doc(docId).update({
+      'organizedImageUrl': organizedImageUrl,
+      'organizedRegensUsed': organizedRegensUsed,
+      'organizedImageUpdatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   double _computeClutterScore(int objectCount, List<String> labels) {

@@ -21,6 +21,7 @@ class FirebaseAnalysisRepository implements IAnalysisRepository {
       'uid': uid,
       'imageUrl': imageUrl,
       'title': title,
+      'organizedRegensUsed': 0,
       'clutterScore': clutter,
       'primaryCategory': primaryCategory,
       'categories': categories,
@@ -75,15 +76,33 @@ class FirebaseAnalysisRepository implements IAnalysisRepository {
       required String imageUrl,
       required String organizedImageUrl,
       required VisionAnalysis analysis}) async {
+    await createAndReturnId(
+      uid: uid,
+      title: title,
+      imageUrl: imageUrl,
+      organizedImageUrl: organizedImageUrl,
+      analysis: analysis,
+    );
+  }
+
+  @override
+  Future<String> createAndReturnId(
+      {required String uid,
+      required String title,
+      required String imageUrl,
+      required String organizedImageUrl,
+      required VisionAnalysis analysis}) async {
     final clutter =
         _computeClutterScore(analysis.objects.length, analysis.labels);
     final primaryCategory = _derivePrimaryCategory(analysis);
     final categories = _deriveCategories(analysis);
-    await _db.collection('analyses').add({
+    final ref = await _db.collection('analyses').add({
       'uid': uid,
       'title': title,
       'imageUrl': imageUrl,
       'organizedImageUrl': organizedImageUrl,
+      'organizedRegensUsed': 0,
+      'organizedImageUpdatedAt': FieldValue.serverTimestamp(),
       'clutterScore': clutter,
       'primaryCategory': primaryCategory,
       'categories': categories,
@@ -102,6 +121,7 @@ class FirebaseAnalysisRepository implements IAnalysisRepository {
           .toList(),
       'createdAt': FieldValue.serverTimestamp(),
     });
+    return ref.id;
   }
 
   double _computeClutterScore(int objectCount, List<String> labels) {

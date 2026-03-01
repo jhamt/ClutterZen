@@ -12,6 +12,12 @@ abstract class IAnalysisRepository {
       required String imageUrl,
       required String organizedImageUrl,
       required VisionAnalysis analysis});
+  Future<String> createAndReturnId(
+      {required String uid,
+      required String title,
+      required String imageUrl,
+      required String organizedImageUrl,
+      required VisionAnalysis analysis});
 }
 
 class StoredAnalysis {

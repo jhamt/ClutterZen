@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class Env {
@@ -19,13 +20,7 @@ class Env {
       _get('GEMINI_API_KEY', const String.fromEnvironment('GEMINI_API_KEY'));
 
   // --- Firebase Functions ---
-  static String get firebaseFunctionsUrl => _get(
-      'FIREBASE_FUNCTIONS_URL',
-      const String.fromEnvironment(
-        'FIREBASE_FUNCTIONS_URL',
-        defaultValue:
-            'https://us-central1-clutterzen-test.cloudfunctions.net/api',
-      ));
+  static String get firebaseFunctionsUrl => _resolveFunctionsUrl();
 
   // --- Firebase Web Config (Optional - use google-services.json instead for Android/iOS) ---
   static String get firebaseApiKey => _get(
@@ -63,4 +58,21 @@ class Env {
     if (buildTimeValue.isNotEmpty) return buildTimeValue;
     return dotEnvValue(key) ?? '';
   }
+
+  @visibleForTesting
+  static String resolveFunctionsUrlForTest({
+    String? dartDefineValue,
+    String? dotenvValue,
+  }) {
+    final fromDefine = (dartDefineValue ??
+            const String.fromEnvironment('FIREBASE_FUNCTIONS_URL'))
+        .trim();
+    if (fromDefine.isNotEmpty) {
+      return fromDefine;
+    }
+
+    return (dotenvValue ?? dotEnvValue('FIREBASE_FUNCTIONS_URL') ?? '').trim();
+  }
+
+  static String _resolveFunctionsUrl() => resolveFunctionsUrlForTest();
 }

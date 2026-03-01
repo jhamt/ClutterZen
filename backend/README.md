@@ -67,6 +67,11 @@ Available routes:
 
 - `POST /replicate/generate`
   - body: `{ "imageUrl": "https://..." }`
+  - success response:
+    - `data.outputUrl` (durable Firebase Storage download URL)
+    - `data.predictionId`
+    - `data.sourceOutputUrl` (original provider URL)
+    - `data.storagePath` (Firebase Storage object path)
 
 ## Integrating with the Flutter app
 

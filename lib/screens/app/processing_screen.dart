@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
+import '../../services/i18n_service.dart';
+
 class ProcessingScreen extends StatefulWidget {
   const ProcessingScreen({super.key, this.background, this.onReady});
 
@@ -17,35 +19,68 @@ class ProcessingScreen extends StatefulWidget {
 class _ProcessingScreenState extends State<ProcessingScreen> {
   static const _lottieUrl =
       'https://lottie.host/0bd5139f-6801-4bfe-abdf-e4e03d90ab03/2DCtc5jJKu.json';
-  final List<String> _steps = const [
-    'Detecting objects...',
-    'Analyzing clutter level...',
-    'Generating solutions...'
-  ];
-  final List<String> _tips = const [
-    'Tip: Group similar items to reduce visual noise.',
-    'Tip: Clear flat surfaces first for fast wins.',
-    'Tip: Label bins to keep organization sustainable.',
-  ];
+  List<String> get _steps => [
+        I18nService.translate("Detecting objects..."),
+        I18nService.translate("Analyzing clutter level..."),
+        I18nService.translate("Generating solutions..."),
+      ];
+  List<String> get _tips => [
+        I18nService.translate(
+            "Tip: Group similar items to reduce visual noise."),
+        I18nService.translate("Tip: Clear flat surfaces first for fast wins."),
+        I18nService.translate(
+            "Tip: Label bins to keep organization sustainable."),
+      ];
 
   int _currentStep = 0;
   int _tipIndex = 0;
-  Timer? _timer;
+  Timer? _stepTimer;
+  Timer? _tipTimer;
+  bool _taskCompleted = false;
 
   @override
   void initState() {
     super.initState();
-    // Kick off async task if provided, after first frame to ensure context is ready
+    _startProgressTimers();
+
+    // Kick off async task if provided, after first frame to ensure context is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final cb = widget.onReady;
-      if (cb != null) {
-        await cb(context);
-      }
-    });
-    _timer = Timer.periodic(const Duration(milliseconds: 1500), (t) {
+      if (cb == null) return;
+      await cb(context);
       if (!mounted) return;
       setState(() {
-        _currentStep = (_currentStep + 1) % (_steps.length + 1); // loops
+        _taskCompleted = true;
+        _currentStep = _steps.length; // mark all steps complete exactly once
+      });
+      _stepTimer?.cancel();
+    });
+  }
+
+  void _startProgressTimers() {
+    _stepTimer = Timer.periodic(const Duration(milliseconds: 1500), (t) {
+      if (!mounted) return;
+      setState(() {
+        if (_taskCompleted) {
+          _currentStep = _steps.length;
+          t.cancel();
+          return;
+        }
+
+        // Advance only forward and never loop back to first step.
+        if (_currentStep < _steps.length - 1) {
+          _currentStep += 1;
+        } else if (widget.onReady == null) {
+          // If no async task is attached, allow the final step to complete.
+          _currentStep = _steps.length;
+          t.cancel();
+        }
+      });
+    });
+
+    _tipTimer = Timer.periodic(const Duration(milliseconds: 2200), (t) {
+      if (!mounted) return;
+      setState(() {
         _tipIndex = (_tipIndex + 1) % _tips.length;
       });
     });
@@ -53,7 +88,8 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _stepTimer?.cancel();
+    _tipTimer?.cancel();
     super.dispose();
   }
 
@@ -61,12 +97,12 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Processing'),
+        title: Text(I18nService.translate("Processing")),
         actions: [
-          Row(children: const [
+          Row(children: [
             Icon(Icons.camera_alt_outlined),
             SizedBox(width: 4),
-            Text('3'),
+            Text(I18nService.translate("3")),
             SizedBox(width: 12)
           ])
         ],
@@ -104,7 +140,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                       height: 150,
                       child: Lottie.network(_lottieUrl, repeat: true)),
                   const SizedBox(height: 16),
-                  Text('Analyzing Your Image',
+                  Text(I18nService.translate("Analyzing Your Image"),
                       style: Theme.of(context).textTheme.titleLarge,
                       textAlign: TextAlign.center),
                   const SizedBox(height: 12),
@@ -112,8 +148,9 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                   for (int i = 0; i < _steps.length; i++)
                     _ProcessingStep(
                         text: _steps[i],
-                        isActive: _currentStep == i,
-                        isComplete: _currentStep > i),
+                        isActive: !_taskCompleted && _currentStep == i,
+                        isComplete: _currentStep > i ||
+                            (_taskCompleted && i == _steps.length - 1)),
                   const SizedBox(height: 16),
                   Text(_tips[_tipIndex],
                       style: Theme.of(context)

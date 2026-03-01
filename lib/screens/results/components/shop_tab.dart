@@ -6,9 +6,12 @@ import '../../../models/product_recommendation.dart';
 import '../../../models/vision_models.dart';
 import '../../../services/product_recommendation_service.dart';
 
+import '../../../services/i18n_service.dart';
+
 class ShopTab extends StatefulWidget {
-  const ShopTab({super.key, required this.analysis});
+  const ShopTab({super.key, required this.analysis, this.embedded = false});
   final VisionAnalysis analysis;
+  final bool embedded;
 
   @override
   State<ShopTab> createState() => _ShopTabState();
@@ -62,7 +65,7 @@ class _ShopTabState extends State<ShopTab> {
           .map((geminiProduct) => ProductRecommendation(
                 name: geminiProduct.name,
                 price: geminiProduct.price ?? 0.0,
-                merchant: 'AI Recommended',
+                merchant: I18nService.translate("AI Recommended"),
                 category: geminiProduct.category,
                 affiliateLink: geminiProduct.affiliateUrl ?? '',
                 imageUrl: geminiProduct.imageUrl ?? '',
@@ -91,7 +94,8 @@ class _ShopTabState extends State<ShopTab> {
               children: [
                 const Icon(Icons.error_outline, size: 48, color: Colors.grey),
                 const SizedBox(height: 16),
-                Text('Error loading products: ${snapshot.error}'),
+                Text(
+                    '${I18nService.translate("Error loading products")}: ${snapshot.error}'),
               ],
             ),
           );
@@ -110,8 +114,9 @@ class _ShopTabState extends State<ShopTab> {
                 const SizedBox(height: 16),
                 Text(
                   _searchQuery.isNotEmpty || _selectedCategory != null
-                      ? 'No products match your search'
-                      : 'No product recommendations available',
+                      ? I18nService.translate("No products match your search")
+                      : I18nService.translate(
+                          "No product recommendations available"),
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 if (_searchQuery.isNotEmpty || _selectedCategory != null)
@@ -122,12 +127,31 @@ class _ShopTabState extends State<ShopTab> {
                         _selectedCategory = null;
                       });
                     },
-                    child: const Text('Clear filters'),
+                    child: Text(I18nService.translate("Clear filters")),
                   ),
               ],
             ),
           );
         }
+
+        final grid = GridView.builder(
+          padding: const EdgeInsets.all(8),
+          shrinkWrap: widget.embedded,
+          physics: widget.embedded
+              ? const NeverScrollableScrollPhysics()
+              : const BouncingScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 0.7,
+          ),
+          itemCount: filtered.length,
+          itemBuilder: (context, i) {
+            final product = filtered[i];
+            return _ProductCard(product: product);
+          },
+        );
 
         return Column(
           children: [
@@ -138,7 +162,7 @@ class _ShopTabState extends State<ShopTab> {
                 children: [
                   TextField(
                     decoration: InputDecoration(
-                      hintText: 'Search products...',
+                      hintText: I18nService.translate("Search products..."),
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
@@ -163,27 +187,27 @@ class _ShopTabState extends State<ShopTab> {
                       scrollDirection: Axis.horizontal,
                       children: [
                         _CategoryChip(
-                          label: 'All',
+                          label: I18nService.translate("All"),
                           selected: _selectedCategory == null,
                           onTap: () => setState(() => _selectedCategory = null),
                         ),
                         const SizedBox(width: 8),
                         _CategoryChip(
-                          label: 'Storage',
+                          label: I18nService.translate("Storage"),
                           selected: _selectedCategory == 'Storage',
                           onTap: () =>
                               setState(() => _selectedCategory = 'Storage'),
                         ),
                         const SizedBox(width: 8),
                         _CategoryChip(
-                          label: 'Organizers',
+                          label: I18nService.translate("Organizers"),
                           selected: _selectedCategory == 'Organizers',
                           onTap: () =>
                               setState(() => _selectedCategory = 'Organizers'),
                         ),
                         const SizedBox(width: 8),
                         _CategoryChip(
-                          label: 'Furniture',
+                          label: I18nService.translate("Furniture"),
                           selected: _selectedCategory == 'Furniture',
                           onTap: () =>
                               setState(() => _selectedCategory = 'Furniture'),
@@ -194,23 +218,7 @@ class _ShopTabState extends State<ShopTab> {
                 ],
               ),
             ),
-            // Products grid
-            Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.all(8),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 0.7,
-                ),
-                itemCount: filtered.length,
-                itemBuilder: (context, i) {
-                  final product = filtered[i];
-                  return _ProductCard(product: product);
-                },
-              ),
-            ),
+            if (widget.embedded) grid else Expanded(child: grid),
           ],
         );
       },
@@ -350,17 +358,28 @@ class _ProductCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   // Shop button
                   SizedBox(
+                    height: 40,
                     width: double.infinity,
-                    child: ElevatedButton(
+                    child: ElevatedButton.icon(
                       onPressed: () => _launchUrl(product.affiliateLink),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        backgroundColor: const Color(0xFF111111),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      child: const Text('Shop Now',
-                          style: TextStyle(fontSize: 12)),
+                      label: Text(I18nService.translate("Shop Now")),
                     ),
                   ),
                 ],

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../../app_firebase.dart';
 import '../../models/vision_models.dart';
+import '../../services/i18n_service.dart';
 import '../results/results_screen.dart';
 
 class HistoryScreen extends StatelessWidget {
@@ -11,9 +13,10 @@ class HistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final uid = AppFirebase.auth.currentUser?.uid;
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan History')),
+      appBar: AppBar(title: Text(I18nService.translate('scan_history'))),
       body: uid == null
-          ? const Center(child: Text('Sign in to view history'))
+          ? Center(
+              child: Text(I18nService.translate('sign_in_to_view_history')))
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: AppFirebase.firestore
                   .collection('analyses')
@@ -21,84 +24,173 @@ class HistoryScreen extends StatelessWidget {
                   .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snap) {
-                if (!snap.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                if (!snap.hasData && !snap.hasError) {
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Center(child: CircularProgressIndicator()),
+                      const SizedBox(height: 12),
+                      Text(I18nService.translate('loading_history')),
+                    ],
+                  );
                 }
-                final docs = snap.data!.docs;
-                if (docs.isEmpty) {
-                  return const Center(child: Text('No scans yet'));
+                final docs = snap.data?.docs ?? const [];
+                final hasError = snap.hasError;
+                final dedupedDocs =
+                    <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                final seenImageKeys = <String>{};
+                for (final doc in docs) {
+                  final imageUrl =
+                      (doc.data()['imageUrl'] as String?)?.trim() ?? '';
+                  final key = imageUrl.isEmpty ? doc.id : imageUrl;
+                  if (seenImageKeys.add(key)) {
+                    dedupedDocs.add(doc);
+                  }
                 }
-                return ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: docs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (_, i) {
-                    final d = docs[i].data();
-                    final url = d['imageUrl'] as String?;
-                    final title = (d['title'] as String?) ?? 'Scan';
-                    final ts = (d['createdAt'] as Timestamp?);
-                    final date = ts != null ? _format(ts.toDate()) : '';
-                    final score =
-                        (d['clutterScore'] as num?)?.toStringAsFixed(1) ?? '-';
-                    final chip = (d['primaryCategory'] as String?) ?? 'Home';
-                    return _HistoryCard(
-                      thumbnailUrl: url,
-                      title: title,
-                      subtitle: date,
-                      category: chip,
-                      score: score,
-                      onTap: () {
-                        final labels = (d['labels'] as List?)?.cast<String>() ??
-                            const <String>[];
-                        final objectsRaw =
-                            (d['objects'] as List?) ?? const <dynamic>[];
-                        final objects = objectsRaw.map((o) {
-                          final box = o is Map<String, dynamic>
-                              ? (o['box'] as Map<String, dynamic>? ?? const {})
-                              : const <String, dynamic>{};
-                          return DetectedObject(
-                            name: (o is Map && o['name'] is String)
-                                ? o['name'] as String
-                                : 'object',
-                            confidence: (o is Map && o['confidence'] is num)
-                                ? (o['confidence'] as num).toDouble()
-                                : 0.0,
-                            box: BoundingBoxNormalized(
-                              left: (box['left'] is num)
-                                  ? (box['left'] as num).toDouble()
-                                  : 0.0,
-                              top: (box['top'] is num)
-                                  ? (box['top'] as num).toDouble()
-                                  : 0.0,
-                              width: (box['width'] is num)
-                                  ? (box['width'] as num).toDouble()
-                                  : 0.0,
-                              height: (box['height'] is num)
-                                  ? (box['height'] as num).toDouble()
-                                  : 0.0,
-                            ),
+                if (dedupedDocs.isEmpty) {
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (hasError)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          child: _HistoryLiveWarning(),
+                        ),
+                      Text(I18nService.translate('no_scans_yet')),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [
+                    if (hasError)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
+                        child: _HistoryLiveWarning(),
+                      ),
+                    Expanded(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: dedupedDocs.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (_, i) {
+                          final docId = dedupedDocs[i].id;
+                          final d = dedupedDocs[i].data();
+                          final url = d['imageUrl'] as String?;
+                          final title = (d['title'] as String?) ??
+                              I18nService.translate("Scan");
+                          final ts = (d['createdAt'] as Timestamp?);
+                          final date = ts != null ? _format(ts.toDate()) : '';
+                          final score =
+                              (d['clutterScore'] as num?)?.toStringAsFixed(1) ??
+                                  '-';
+                          final chip = (d['primaryCategory'] as String?) ??
+                              I18nService.translate("Home");
+                          return _HistoryCard(
+                            thumbnailUrl: url,
+                            title: title,
+                            subtitle: date,
+                            category: chip,
+                            score: score,
+                            onTap: () {
+                              final labels =
+                                  (d['labels'] as List?)?.cast<String>() ??
+                                      const <String>[];
+                              final objectsRaw =
+                                  (d['objects'] as List?) ?? const <dynamic>[];
+                              final objects = objectsRaw.map((o) {
+                                final box = o is Map<String, dynamic>
+                                    ? (o['box'] as Map<String, dynamic>? ??
+                                        const {})
+                                    : const <String, dynamic>{};
+                                return DetectedObject(
+                                  name: (o is Map && o['name'] is String)
+                                      ? o['name'] as String
+                                      : I18nService.translate("object"),
+                                  confidence:
+                                      (o is Map && o['confidence'] is num)
+                                          ? (o['confidence'] as num).toDouble()
+                                          : 0.0,
+                                  box: BoundingBoxNormalized(
+                                    left: (box['left'] is num)
+                                        ? (box['left'] as num).toDouble()
+                                        : 0.0,
+                                    top: (box['top'] is num)
+                                        ? (box['top'] as num).toDouble()
+                                        : 0.0,
+                                    width: (box['width'] is num)
+                                        ? (box['width'] as num).toDouble()
+                                        : 0.0,
+                                    height: (box['height'] is num)
+                                        ? (box['height'] as num).toDouble()
+                                        : 0.0,
+                                  ),
+                                );
+                              }).toList();
+                              final analysis = VisionAnalysis(
+                                  objects: objects, labels: labels);
+                              final imageUrl = url ?? '';
+                              final organizedUrl =
+                                  d['organizedImageUrl'] as String?;
+                              final organizedRegensUsed =
+                                  (d['organizedRegensUsed'] as num?)?.toInt() ??
+                                      0;
+                              if (imageUrl.isNotEmpty) {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => ResultsScreen(
+                                        image: NetworkImage(imageUrl),
+                                        analysis: analysis,
+                                        organizedUrl: organizedUrl,
+                                        analysisDocId: docId,
+                                        organizedRegensUsed:
+                                            organizedRegensUsed),
+                                  ),
+                                );
+                              }
+                            },
                           );
-                        }).toList();
-                        final analysis =
-                            VisionAnalysis(objects: objects, labels: labels);
-                        final imageUrl = url ?? '';
-                        final organizedUrl = d['organizedImageUrl'] as String?;
-                        if (imageUrl.isNotEmpty) {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ResultsScreen(
-                                  image: NetworkImage(imageUrl),
-                                  analysis: analysis,
-                                  organizedUrl: organizedUrl),
-                            ),
-                          );
-                        }
-                      },
-                    );
-                  },
+                        },
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
+    );
+  }
+}
+
+class _HistoryLiveWarning extends StatelessWidget {
+  const _HistoryLiveWarning();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6ED),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFCCB9C)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 18, color: Color(0xFFB54708)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              I18nService.translate('history_load_error'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF7A2E0B),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -134,10 +226,18 @@ class _HistoryCard extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: thumbnailUrl != null && thumbnailUrl!.isNotEmpty
-                    ? Image.network(thumbnailUrl!,
-                        width: 72, height: 72, fit: BoxFit.cover)
-                    : Container(width: 72, height: 72, color: Colors.grey[300]),
+                child: SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: thumbnailUrl != null && thumbnailUrl!.isNotEmpty
+                      ? Image.network(
+                          thumbnailUrl!,
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(color: Colors.grey[300]),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -167,7 +267,7 @@ class _HistoryCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('Clutter score',
+                  Text(I18nService.translate("Clutter score"),
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
@@ -185,7 +285,9 @@ class _HistoryCard extends StatelessWidget {
                               blurRadius: 8,
                               offset: const Offset(0, 4))
                         ]),
-                    child: Text('$score/10',
+                    child: Text(
+                        I18nService.translate("{score}/10",
+                            params: {'score': score}),
                         style: const TextStyle(
                             color: Colors.white, fontWeight: FontWeight.w700)),
                   ),
@@ -200,19 +302,5 @@ class _HistoryCard extends StatelessWidget {
 }
 
 String _format(DateTime d) {
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec'
-  ];
-  return '${months[d.month - 1]} ${d.day}, ${d.year}';
+  return DateFormat.yMMMd(I18nService.currentLocale.toString()).format(d);
 }

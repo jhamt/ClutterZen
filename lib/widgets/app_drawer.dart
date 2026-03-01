@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../app_firebase.dart';
+import '../services/i18n_service.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -28,17 +29,18 @@ class AppDrawer extends StatelessWidget {
                       snapshot.data?.data() ?? const <String, dynamic>{};
                   final displayName = user.displayName ??
                       (data['displayName'] as String?) ??
-                      'You';
+                      I18nService.translate('you');
                   final email = user.email ??
                       (data['email'] as String?) ??
-                      'Add your email';
+                      I18nService.translate('add_your_email');
                   final photoUrl = user.photoURL;
-                  final planRaw = (data['plan'] as String?) ?? 'Free';
+                  final planRaw = (data['plan'] as String?) ??
+                      I18nService.translate('free_plan');
                   final planLower = planRaw.toLowerCase();
                   final planLabel = planLower == 'pro'
-                      ? 'Pro Plan'
+                      ? I18nService.translate('pro_plan')
                       : planLower == 'free'
-                          ? 'Free Plan'
+                          ? I18nService.translate('free_plan')
                           : planRaw;
                   final creditsLeft = (data['scanCredits'] as num?)?.toInt();
                   final creditsTotal = (data['creditsTotal'] as num?)?.toInt();
@@ -51,22 +53,31 @@ class AppDrawer extends StatelessWidget {
 
                   double? progress;
                   String creditsSummary;
-                  final hasUnlimitedCredits =
-                      planLower == 'pro' &&
-                          (creditsTotal == null || creditsTotal <= 0);
+                  final hasUnlimitedCredits = planLower == 'pro' &&
+                      (creditsTotal == null || creditsTotal <= 0);
                   if (hasUnlimitedCredits) {
-                    creditsSummary = 'Unlimited credits included';
+                    creditsSummary =
+                        I18nService.translate('unlimited_credits_included');
                   } else if (creditsTotal != null &&
                       creditsTotal > 0 &&
                       creditsUsedCalculated != null) {
                     progress =
                         (creditsUsedCalculated / creditsTotal).clamp(0.0, 1.0);
-                    creditsSummary =
-                        '$creditsUsedCalculated of $creditsTotal credits used';
+                    creditsSummary = I18nService.translate(
+                      'credits_used_summary',
+                      params: {
+                        'used': '$creditsUsedCalculated',
+                        'total': '$creditsTotal',
+                      },
+                    );
                   } else if (creditsLeft != null) {
-                    creditsSummary = '$creditsLeft credits remaining';
+                    creditsSummary = I18nService.translate(
+                      'credits_remaining_summary',
+                      params: {'count': '$creditsLeft'},
+                    );
                   } else {
-                    creditsSummary = 'Credits information unavailable';
+                    creditsSummary =
+                        I18nService.translate('credits_info_unavailable');
                   }
 
                   return ListView(
@@ -89,7 +100,7 @@ class AppDrawer extends StatelessWidget {
                         },
                       ),
                       const SizedBox(height: 24),
-                      Text('Quick links',
+                      Text(I18nService.translate('quick_links'),
                           style: Theme.of(context)
                               .textTheme
                               .titleMedium
@@ -97,14 +108,14 @@ class AppDrawer extends StatelessWidget {
                       const SizedBox(height: 12),
                       _DrawerLink(
                         icon: Icons.home_outlined,
-                        label: 'Home',
+                        label: I18nService.translate('home'),
                         onTap: () {
                           Navigator.of(context).pop();
                         },
                       ),
                       _DrawerLink(
                         icon: Icons.category_outlined,
-                        label: 'Categories',
+                        label: I18nService.translate('categories'),
                         onTap: () {
                           Navigator.of(context).pop();
                           Navigator.of(context).pushNamed('/categories');
@@ -112,7 +123,7 @@ class AppDrawer extends StatelessWidget {
                       ),
                       _DrawerLink(
                         icon: Icons.history,
-                        label: 'History',
+                        label: I18nService.translate('history'),
                         onTap: () {
                           Navigator.of(context).pop();
                           Navigator.of(context).pushNamed('/history');
@@ -120,7 +131,7 @@ class AppDrawer extends StatelessWidget {
                       ),
                       _DrawerLink(
                         icon: Icons.account_circle_outlined,
-                        label: 'Profile & Settings',
+                        label: I18nService.translate('profile_settings'),
                         onTap: () {
                           Navigator.of(context).pop();
                           Navigator.of(context).pushNamed('/settings');
@@ -128,7 +139,7 @@ class AppDrawer extends StatelessWidget {
                       ),
                       _DrawerLink(
                         icon: Icons.help_outline,
-                        label: 'FAQs & Support',
+                        label: I18nService.translate('faqs_support'),
                         onTap: () {
                           Navigator.of(context).pop();
                           Navigator.of(context).pushNamed('/faqs');
@@ -146,7 +157,7 @@ class AppDrawer extends StatelessWidget {
                           }
                         },
                         icon: const Icon(Icons.logout),
-                        label: const Text('Sign out'),
+                        label: Text(I18nService.translate('sign_out')),
                         style: TextButton.styleFrom(
                           foregroundColor: Theme.of(context).colorScheme.error,
                         ),
@@ -170,14 +181,14 @@ class _AnonymousDrawer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Welcome to Clutter Zen',
+          Text(I18nService.translate('welcome_to_clutter_zen'),
               style: Theme.of(context)
                   .textTheme
                   .headlineSmall
                   ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Text(
-            'Sign in to track progress, manage credits, and unlock personalized plans.',
+            I18nService.translate('sign_in_track_progress'),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const Spacer(),
@@ -208,7 +219,7 @@ class _AnonymousDrawer extends StatelessWidget {
                   ),
                   elevation: 0,
                 ),
-                child: const Text('Sign in or create account'),
+                child: Text(I18nService.translate('sign_in_or_create_account')),
               ),
             ),
           ),
@@ -323,13 +334,17 @@ class _PlanCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                plan,
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w800),
+              Expanded(
+                child: Text(
+                  plan,
+                  style: theme.textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -338,7 +353,7 @@ class _PlanCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  'Current plan',
+                  I18nService.translate('current_plan'),
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: theme.colorScheme.primary,
                     fontWeight: FontWeight.w600,
@@ -371,7 +386,7 @@ class _PlanCard extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: onUpgrade,
               icon: const Icon(Icons.rocket_launch_outlined),
-              label: const Text('Upgrade plan'),
+              label: Text(I18nService.translate('upgrade_plan')),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
                 shape: RoundedRectangleBorder(

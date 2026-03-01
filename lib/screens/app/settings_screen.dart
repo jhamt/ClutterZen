@@ -21,8 +21,8 @@ class SettingsScreen extends StatelessWidget {
             icon: const Icon(Icons.arrow_back, color: Colors.black),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          title: const Text(
-            'Profile',
+          title: Text(
+            I18nService.translate('profile_title'),
             style: TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.bold,
@@ -31,8 +31,8 @@ class SettingsScreen extends StatelessWidget {
           ),
           centerTitle: true,
         ),
-        body: const Center(
-          child: Text('Please sign in to view your profile'),
+        body: Center(
+          child: Text(I18nService.translate('please_sign_in_profile')),
         ),
       );
     }
@@ -46,8 +46,8 @@ class SettingsScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Profile',
+        title: Text(
+          I18nService.translate('profile_title'),
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -67,26 +67,38 @@ class SettingsScreen extends StatelessWidget {
           final data = snapshot.data?.data() ?? const <String, dynamic>{};
           final displayName = user.displayName ??
               (data['displayName'] as String?) ??
-              'Guest User';
-          final email =
-              user.email ?? (data['email'] as String?) ?? 'No email provided';
+              I18nService.translate('guest_user');
+          final email = user.email ??
+              (data['email'] as String?) ??
+              I18nService.translate('no_email_provided');
           final photoUrl = user.photoURL;
-          final plan = (data['plan'] as String?) ?? 'Free';
+          final plan =
+              (data['plan'] as String?) ?? I18nService.translate('free_plan');
           final planNameLower = plan.toLowerCase();
           final planLabel = planNameLower == 'pro'
-              ? 'Pro Plan'
+              ? I18nService.translate('pro_plan')
               : planNameLower == 'free'
-                  ? 'Free Plan'
+                  ? I18nService.translate('free_plan')
                   : plan;
           final creditsLeft = (data['scanCredits'] as num?)?.toInt() ?? 0;
           final creditsTotal = (data['creditsTotal'] as num?)?.toInt();
           final bool unlimitedCredits = planNameLower == 'pro' &&
               (creditsTotal == null || creditsTotal <= 0);
           final creditsLabel = unlimitedCredits
-              ? 'Unlimited'
-              : '$creditsLeft${creditsTotal != null ? ' of $creditsTotal' : ''}';
-          final phoneNumber = user.phoneNumber ?? 'No phone number';
-          final address = (data['address'] as String?) ?? 'No address provided';
+              ? I18nService.translate('unlimited')
+              : (creditsTotal != null
+                  ? I18nService.translate(
+                      'credits_of_total',
+                      params: {
+                        'left': '$creditsLeft',
+                        'total': '$creditsTotal',
+                      },
+                    )
+                  : '$creditsLeft');
+          final phoneNumber =
+              user.phoneNumber ?? I18nService.translate('no_phone_number');
+          final address = (data['address'] as String?) ??
+              I18nService.translate('no_address_provided');
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -220,26 +232,26 @@ class SettingsScreen extends StatelessWidget {
 
                 // Personal Info Section
                 _InfoSection(
-                  title: 'Personal info',
+                  title: I18nService.translate('personal_info'),
                   items: [
                     _InfoItem(
                       icon: Icons.person_outline,
-                      label: 'Name',
+                      label: I18nService.translate('name'),
                       value: displayName,
                     ),
                     _InfoItem(
                       icon: Icons.email_outlined,
-                      label: 'E-mail',
+                      label: I18nService.translate('email_label'),
                       value: email,
                     ),
                     _InfoItem(
                       icon: Icons.phone_outlined,
-                      label: 'Phone number',
+                      label: I18nService.translate('phone_number'),
                       value: phoneNumber,
                     ),
                     _InfoItem(
                       icon: Icons.home_outlined,
-                      label: 'Home address',
+                      label: I18nService.translate('home_address'),
                       value: address,
                     ),
                   ],
@@ -251,21 +263,21 @@ class SettingsScreen extends StatelessWidget {
 
                 // Account Info Section
                 _InfoSection(
-                  title: 'Account info',
+                  title: I18nService.translate('account_info'),
                   items: [
                     _InfoItem(
                       icon: Icons.card_membership_outlined,
-                      label: 'Current Plan',
+                      label: I18nService.translate('current_plan'),
                       value: planLabel,
                     ),
                     _InfoItem(
                       icon: Icons.stars_outlined,
-                      label: 'Credits Remaining',
+                      label: I18nService.translate('credits_remaining'),
                       value: creditsLabel,
                     ),
                     _InfoItem(
                       icon: Icons.calendar_today_outlined,
-                      label: 'Member Since',
+                      label: I18nService.translate('member_since'),
                       value: _formatDate(data['createdAt']),
                     ),
                   ],
@@ -281,7 +293,7 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsCard(
                   icon: Icons.notifications_outlined,
                   iconColor: const Color(0xFF111111),
-                  title: 'Notification Settings',
+                  title: I18nService.translate('notification_settings'),
                   trailing: const Icon(Icons.keyboard_arrow_right,
                       color: Colors.grey),
                   onTap: () =>
@@ -292,7 +304,7 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsCard(
                   icon: Icons.history,
                   iconColor: const Color(0xFF111111),
-                  title: 'Scan history',
+                  title: I18nService.translate('scan_history'),
                   trailing: const Icon(Icons.keyboard_arrow_right,
                       color: Colors.grey),
                   onTap: () => Navigator.of(context).pushNamed('/history'),
@@ -302,7 +314,7 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsCard(
                   icon: Icons.card_membership,
                   iconColor: const Color(0xFF111111),
-                  title: 'Manage Subscription',
+                  title: I18nService.translate('manage_subscription'),
                   trailing: const Icon(Icons.keyboard_arrow_right,
                       color: Colors.grey),
                   onTap: () => Navigator.of(context).pushNamed('/subscription'),
@@ -312,7 +324,7 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsCard(
                   icon: Icons.account_balance_wallet,
                   iconColor: const Color(0xFF111111),
-                  title: 'Connect Stripe Account',
+                  title: I18nService.translate('connect_stripe_account'),
                   trailing: const Icon(Icons.keyboard_arrow_right,
                       color: Colors.grey),
                   onTap: () =>
@@ -321,11 +333,11 @@ class SettingsScreen extends StatelessWidget {
                 const SizedBox(height: 24),
 
                 // App Settings Section Header
-                const Padding(
-                  padding: EdgeInsets.only(left: 16, bottom: 12),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, bottom: 12),
                   child: Text(
-                    'App Settings',
-                    style: TextStyle(
+                    I18nService.translate('app_settings'),
+                    style: const TextStyle(
                       color: Colors.grey,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -336,7 +348,7 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsCard(
                   icon: Icons.help_outline,
                   iconColor: const Color(0xFF111111),
-                  title: 'Support',
+                  title: I18nService.translate('support'),
                   trailing: const Icon(Icons.keyboard_arrow_right,
                       color: Colors.grey),
                   onTap: () => Navigator.of(context).pushNamed('/contact-us'),
@@ -346,7 +358,7 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsCard(
                   icon: Icons.security,
                   iconColor: Colors.black,
-                  title: 'Terms of Service',
+                  title: I18nService.translate('terms_of_service'),
                   trailing: const Icon(Icons.keyboard_arrow_right,
                       color: Colors.grey),
                   onTap: () => Navigator.of(context).pushNamed('/terms'),
@@ -356,7 +368,7 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsCard(
                   icon: Icons.privacy_tip_outlined,
                   iconColor: const Color(0xFF111111),
-                  title: 'Privacy Policy',
+                  title: I18nService.translate('privacy_policy'),
                   trailing: const Icon(Icons.keyboard_arrow_right,
                       color: Colors.grey),
                   onTap: () =>
@@ -367,7 +379,7 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsCard(
                   icon: Icons.logout,
                   iconColor: Colors.red,
-                  title: 'Log Out',
+                  title: I18nService.translate('log_out'),
                   trailing: null,
                   onTap: () async {
                     await AppFirebase.auth.signOut();
@@ -387,15 +399,15 @@ class SettingsScreen extends StatelessWidget {
   }
 
   String _formatDate(dynamic timestamp) {
-    if (timestamp == null) return 'Unknown';
+    if (timestamp == null) return I18nService.translate('unknown');
     try {
       if (timestamp is Timestamp) {
         final date = timestamp.toDate();
         return '${date.month}/${date.day}/${date.year}';
       }
-      return 'Unknown';
+      return I18nService.translate('unknown');
     } catch (e) {
-      return 'Unknown';
+      return I18nService.translate('unknown');
     }
   }
 }
@@ -442,9 +454,9 @@ class _InfoSection extends StatelessWidget {
                 ),
                 TextButton(
                   onPressed: onEdit,
-                  child: const Text(
-                    'Edit',
-                    style: TextStyle(
+                  child: Text(
+                    I18nService.translate('edit'),
+                    style: const TextStyle(
                       color: Color(0xFF111111),
                       fontWeight: FontWeight.w600,
                     ),
@@ -576,65 +588,23 @@ class _SettingsCard extends StatelessWidget {
   }
 }
 
-class _LanguageCard extends StatefulWidget {
+class _LanguageCard extends StatelessWidget {
   const _LanguageCard();
 
   @override
-  State<_LanguageCard> createState() => _LanguageCardState();
-}
-
-class _LanguageCardState extends State<_LanguageCard> {
-  @override
   Widget build(BuildContext context) {
-    final currentLocale = I18nService.currentLocale;
-    final currentLanguage = I18nService.getLocaleDisplayName(currentLocale);
-
-    return _SettingsCard(
-      icon: Icons.language,
-      iconColor: const Color(0xFF111111),
-      title: currentLanguage,
-      trailing: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
-      onTap: () => _showLanguageDialog(context),
-    );
-  }
-
-  void _showLanguageDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Language'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: I18nService.supportedLocales.map((locale) {
-            final isSelected = locale == I18nService.currentLocale;
-            return ListTile(
-              title: Text(I18nService.getLocaleDisplayName(locale)),
-              trailing: isSelected
-                  ? const Icon(Icons.check, color: Color(0xFF111111))
-                  : null,
-              onTap: () {
-                I18nService.setLocale(locale);
-                Navigator.of(context).pop();
-                setState(() {}); // Update UI
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Language changed to ${I18nService.getLocaleDisplayName(locale)}',
-                    ),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              },
-            );
-          }).toList(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
+    return ValueListenableBuilder<Locale>(
+      valueListenable: I18nService.localeListenable,
+      builder: (context, locale, _) {
+        final currentLanguage = I18nService.getLocaleDisplayName(locale);
+        return _SettingsCard(
+          icon: Icons.language,
+          iconColor: const Color(0xFF111111),
+          title: '${I18nService.translate('language')}: $currentLanguage',
+          trailing: const Icon(Icons.keyboard_arrow_right, color: Colors.grey),
+          onTap: () => Navigator.of(context).pushNamed('/language-settings'),
+        );
+      },
     );
   }
 }

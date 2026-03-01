@@ -4,6 +4,7 @@ import '../../app_firebase.dart';
 import '../../models/subscription_plan.dart';
 import '../../services/stripe_service.dart';
 import '../../services/user_service.dart';
+import '../../services/i18n_service.dart';
 import 'checkout_screen.dart';
 
 /// Screen for managing user subscriptions
@@ -78,8 +79,9 @@ class _SubscriptionManagementScreenState
       await _loadCurrentSubscription();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Subscription updated successfully!'),
+          SnackBar(
+            content: Text(
+                I18nService.translate("Subscription updated successfully!")),
             backgroundColor: Colors.green,
           ),
         );
@@ -91,20 +93,20 @@ class _SubscriptionManagementScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Downgrade to Free Plan'),
-        content: const Text(
-          'Are you sure you want to downgrade to the Free plan? '
-          'You will lose access to Pro features and your subscription will be canceled.',
+        title: Text(I18nService.translate("Downgrade to Free Plan")),
+        content: Text(
+          I18nService.translate(
+              "Are you sure you want to downgrade to the Free plan? You will lose access to Pro features and your subscription will be canceled."),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(I18nService.translate("Cancel")),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Downgrade'),
+            child: Text(I18nService.translate("Downgrade")),
           ),
         ],
       ),
@@ -138,8 +140,9 @@ class _SubscriptionManagementScreenState
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Downgraded to Free plan successfully'),
+          SnackBar(
+            content: Text(
+                I18nService.translate("Downgraded to Free plan successfully")),
             backgroundColor: Colors.green,
           ),
         );
@@ -148,7 +151,7 @@ class _SubscriptionManagementScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error downgrading: $e'),
+            content: Text('${I18nService.translate("Error downgrading")}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -160,7 +163,7 @@ class _SubscriptionManagementScreenState
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Subscription')),
+        appBar: AppBar(title: Text(I18nService.translate("Subscription"))),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -169,7 +172,7 @@ class _SubscriptionManagementScreenState
     final isPro = _currentPlanId == 'pro';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Subscription')),
+      appBar: AppBar(title: Text(I18nService.translate("Subscription"))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -188,7 +191,7 @@ class _SubscriptionManagementScreenState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Current Plan',
+                                I18nService.translate("Current Plan"),
                                 style: Theme.of(context)
                                     .textTheme
                                     .titleSmall
@@ -217,7 +220,9 @@ class _SubscriptionManagementScreenState
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            isPro ? 'Active' : 'Free',
+                            isPro
+                                ? I18nService.translate("Active")
+                                : I18nService.translate("Free"),
                             style: TextStyle(
                               color: isPro
                                   ? Colors.green.shade900
@@ -243,7 +248,8 @@ class _SubscriptionManagementScreenState
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.red,
                         ),
-                        child: const Text('Cancel Subscription'),
+                        child:
+                            Text(I18nService.translate("Cancel Subscription")),
                       ),
                     ],
                   ],
@@ -254,7 +260,7 @@ class _SubscriptionManagementScreenState
 
           // Available plans
           Text(
-            'Available Plans',
+            I18nService.translate("Available Plans"),
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -304,8 +310,8 @@ class _SubscriptionManagementScreenState
                                 color: Theme.of(context).colorScheme.primary,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Text(
-                                'Popular',
+                              child: Text(
+                                I18nService.translate("Popular"),
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,
@@ -343,7 +349,7 @@ class _SubscriptionManagementScreenState
                       if (isCurrentPlan)
                         OutlinedButton(
                           onPressed: null,
-                          child: const Text('Current Plan'),
+                          child: Text(I18nService.translate("Current Plan")),
                         )
                       else
                         ElevatedButton(
@@ -352,7 +358,9 @@ class _SubscriptionManagementScreenState
                             minimumSize: const Size(double.infinity, 48),
                           ),
                           child: Text(
-                            plan.price == 0 ? 'Switch to Free' : 'Upgrade',
+                            plan.price == 0
+                                ? I18nService.translate("Switch to Free")
+                                : I18nService.translate("Upgrade"),
                           ),
                         ),
                     ],

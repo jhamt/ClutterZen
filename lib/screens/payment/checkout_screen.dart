@@ -6,6 +6,8 @@ import '../../services/stripe_service.dart';
 import '../../services/user_service.dart';
 import '../../app_firebase.dart';
 
+import '../../services/i18n_service.dart';
+
 /// Screen for processing payment and subscription checkout
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({
@@ -34,13 +36,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       await StripeService.initialize();
       if (!StripeService.isInitialized) {
         setState(() {
-          _errorMessage =
-              'Stripe is not configured. Please add STRIPE_PUBLISHABLE_KEY to .env.public.';
+          _errorMessage = I18nService.translate(
+              "Stripe is not configured. Please add STRIPE_PUBLISHABLE_KEY to .env.public.");
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Failed to initialize payment system: $e';
+        _errorMessage =
+            '${I18nService.translate("Failed to initialize payment system")}: $e';
       });
     }
   }
@@ -48,8 +51,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _processPayment() async {
     if (!StripeService.isInitialized) {
       setState(() {
-        _errorMessage =
-            'Payment system not available. Please configure client/public Stripe settings.';
+        _errorMessage = I18nService.translate(
+            "Payment system not available. Please configure client/public Stripe settings.");
       });
       return;
     }
@@ -62,7 +65,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     try {
       final uid = AppFirebase.auth.currentUser?.uid;
       if (uid == null) {
-        throw Exception('User not authenticated');
+        throw Exception(I18nService.translate("User not authenticated"));
       }
 
       // For free plan, just apply it without payment
@@ -73,7 +76,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         Navigator.of(context).pop(true); // Return success
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${widget.plan.name} plan activated successfully!'),
+            content: Text(
+                '${widget.plan.name} ${I18nService.translate("plan activated successfully!")}'),
             backgroundColor: Colors.green,
           ),
         );
@@ -82,8 +86,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       // For paid plans, process payment
       if (widget.plan.priceId.isEmpty) {
-        throw Exception(
-            'Plan price ID not configured. Please set up Stripe Price IDs in subscription_plan.dart');
+        throw Exception(I18nService.translate(
+            "Plan price ID not configured. Please set up Stripe Price IDs in subscription_plan.dart"));
       }
 
       // Process subscription payment
@@ -94,7 +98,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       final subscriptionId = StripeService.lastCreatedSubscriptionId;
       if (subscriptionId == null || subscriptionId.isEmpty) {
-        throw Exception('Missing subscription ID after payment');
+        throw Exception(
+            I18nService.translate("Missing subscription ID after payment"));
       }
 
       // Payment successful, activate plan server-side after ownership/status verification.
@@ -107,17 +112,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       Navigator.of(context).pop(true); // Return success
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${widget.plan.name} plan activated successfully!'),
+          content: Text(
+              '${widget.plan.name} ${I18nService.translate("plan activated successfully!")}'),
           backgroundColor: Colors.green,
         ),
       );
     } on StripeException catch (e) {
       setState(() {
-        _errorMessage = e.error.message ?? 'Payment failed. Please try again.';
+        _errorMessage = e.error.message ??
+            I18nService.translate("Payment failed. Please try again.");
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Payment failed: ${e.toString()}';
+        _errorMessage =
+            '${I18nService.translate("Payment failed")}: ${e.toString()}';
       });
     } finally {
       if (mounted) {
@@ -132,7 +140,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Checkout'),
+        title: Text(I18nService.translate("Checkout")),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -176,7 +184,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       const Divider(),
                       const SizedBox(height: 16),
                       Text(
-                        'Features:',
+                        I18nService.translate("Features:"),
                         style:
                             Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
@@ -247,8 +255,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       )
                     : Text(
                         widget.plan.price == 0
-                            ? 'Activate Free Plan'
-                            : 'Subscribe Now',
+                            ? I18nService.translate("Activate Free Plan")
+                            : I18nService.translate("Subscribe Now"),
                         style: const TextStyle(fontSize: 16),
                       ),
               ),
@@ -262,7 +270,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Your payment is secure and encrypted',
+                      I18nService.translate(
+                          "Your payment is secure and encrypted"),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Colors.grey[600],
                           ),
@@ -289,7 +298,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               color: Colors.orange.shade700),
                           const SizedBox(width: 8),
                           Text(
-                            'Stripe Not Configured',
+                            I18nService.translate("Stripe Not Configured"),
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: Colors.orange.shade700,
@@ -299,10 +308,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'To enable payments:\n'
-                        '1. Configure STRIPE_PUBLISHABLE_KEY in .env.public\n'
-                        '2. Configure STRIPE_SECRET_KEY in Firebase Functions env\n'
-                        '3. Deploy functions and restart the app',
+                        I18nService.translate(
+                            "To enable payments:\n1. Configure STRIPE_PUBLISHABLE_KEY in .env.public\n2. Configure STRIPE_SECRET_KEY in Firebase Functions env\n3. Deploy functions and restart the app"),
                         style: TextStyle(color: Colors.orange.shade700),
                       ),
                     ],

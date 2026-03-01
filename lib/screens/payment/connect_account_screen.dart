@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app_firebase.dart';
 import '../../services/stripe_connect_service.dart';
 import '../../services/stripe_oauth_handler.dart';
+import '../../services/i18n_service.dart';
 
 /// Screen for connecting a Stripe account (for professionals)
 ///
@@ -62,7 +63,7 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error loading account: $e';
+        _errorMessage = '${I18nService.translate("Error loading account")}: $e';
       });
     } finally {
       setState(() => _loading = false);
@@ -72,8 +73,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
   Future<void> _connectExistingAccount() async {
     if (!StripeConnectService.isConfigured) {
       setState(() {
-        _errorMessage =
-            'Stripe Connect is not configured. Please contact support.';
+        _errorMessage = I18nService.translate(
+            "Stripe Connect is not configured. Please contact support.");
       });
       return;
     }
@@ -85,7 +86,7 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
 
     try {
       if (AppFirebase.auth.currentUser?.uid == null) {
-        throw Exception('User not authenticated');
+        throw Exception(I18nService.translate("User not authenticated"));
       }
 
       // Launch OAuth flow via server-generated one-time state.
@@ -96,10 +97,10 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
       // The user will need to return to the app to see the updated status
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'OAuth flow launched. Complete authorization in the browser, '
-              'then return to the app to see your connected account.',
+              I18nService.translate(
+                  "OAuth flow launched. Complete authorization in the browser, then return to the app to see your connected account."),
             ),
             duration: Duration(seconds: 8),
           ),
@@ -107,7 +108,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error connecting account: $e';
+        _errorMessage =
+            '${I18nService.translate("Error connecting account")}: $e';
       });
     } finally {
       if (mounted) {
@@ -119,8 +121,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
   Future<void> _createNewAccount() async {
     if (!StripeConnectService.isConfigured) {
       setState(() {
-        _errorMessage =
-            'Stripe Connect is not configured. Please contact support.';
+        _errorMessage = I18nService.translate(
+            "Stripe Connect is not configured. Please contact support.");
       });
       return;
     }
@@ -135,7 +137,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
       final email = user?.email;
 
       if (user == null || email == null) {
-        throw Exception('User not authenticated or email not available');
+        throw Exception(I18nService.translate(
+            "User not authenticated or email not available"));
       }
 
       // Create connected account
@@ -158,9 +161,10 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'Account created! Complete onboarding in the browser to start accepting payments.',
+                I18nService.translate(
+                    "Account created! Complete onboarding in the browser to start accepting payments."),
               ),
               duration: Duration(seconds: 5),
             ),
@@ -170,11 +174,12 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
         // Reload account status
         await _loadConnectedAccount();
       } else {
-        throw Exception('Could not launch account link');
+        throw Exception(I18nService.translate("Could not launch account link"));
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error creating account: $e';
+        _errorMessage =
+            '${I18nService.translate("Error creating account")}: $e';
       });
     } finally {
       if (mounted) {
@@ -187,7 +192,7 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Connect Stripe Account'),
+        title: Text(I18nService.translate("Connect Stripe Account")),
       ),
       body: _loading && _connectedAccountId == null
           ? const Center(child: CircularProgressIndicator())
@@ -216,7 +221,7 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Stripe Connect',
+                                      I18nService.translate("Stripe Connect"),
                                       style: Theme.of(context)
                                           .textTheme
                                           .titleLarge
@@ -226,7 +231,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Accept payments for your services',
+                                      I18nService.translate(
+                                          "Accept payments for your services"),
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodyMedium
@@ -291,8 +297,9 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                                 Expanded(
                                   child: Text(
                                     _accountReady
-                                        ? 'Account Ready'
-                                        : 'Account Pending',
+                                        ? I18nService.translate("Account Ready")
+                                        : I18nService.translate(
+                                            "Account Pending"),
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium
@@ -306,8 +313,10 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                             const SizedBox(height: 12),
                             Text(
                               _accountReady
-                                  ? 'Your Stripe account is connected and ready to accept payments.'
-                                  : 'Complete the onboarding process to start accepting payments.',
+                                  ? I18nService.translate(
+                                      "Your Stripe account is connected and ready to accept payments.")
+                                  : I18nService.translate(
+                                      "Complete the onboarding process to start accepting payments."),
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           ],
@@ -325,7 +334,7 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Connect Existing Account',
+                              I18nService.translate("Connect Existing Account"),
                               style: Theme.of(context)
                                   .textTheme
                                   .titleMedium
@@ -335,7 +344,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'If you already have a Stripe account, connect it to start accepting payments.',
+                              I18nService.translate(
+                                  "If you already have a Stripe account, connect it to start accepting payments."),
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             const SizedBox(height: 16),
@@ -343,7 +353,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                               onPressed:
                                   _loading ? null : _connectExistingAccount,
                               icon: const Icon(Icons.link),
-                              label: const Text('Connect Existing Account'),
+                              label: Text(I18nService.translate(
+                                  "Connect Existing Account")),
                               style: OutlinedButton.styleFrom(
                                 minimumSize: const Size(double.infinity, 48),
                               ),
@@ -365,8 +376,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'You will be redirected to Stripe to '
-                                      'authorize your existing account.',
+                                      I18nService.translate(
+                                          "You will be redirected to Stripe to authorize your existing account."),
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.blue.shade700,
@@ -391,8 +402,8 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                         children: [
                           Text(
                             _connectedAccountId == null
-                                ? 'Create New Account'
-                                : 'Update Account',
+                                ? I18nService.translate("Create New Account")
+                                : I18nService.translate("Update Account"),
                             style: Theme.of(context)
                                 .textTheme
                                 .titleMedium
@@ -403,8 +414,10 @@ class _ConnectAccountScreenState extends State<ConnectAccountScreen> {
                           const SizedBox(height: 8),
                           Text(
                             _connectedAccountId == null
-                                ? 'Create a new Stripe account to accept payments for your professional services.'
-                                : 'Update your account settings or complete onboarding.',
+                                ? I18nService.translate(
+                                    "Create a new Stripe account to accept payments for your professional services.")
+                                : I18nService.translate(
+                                    "Update your account settings or complete onboarding."),
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 16),

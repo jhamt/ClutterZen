@@ -11,6 +11,8 @@ import '../../env.dart';
 import '../../models/professional_service.dart';
 import '../../services/stripe_service.dart';
 
+import '../../services/i18n_service.dart';
+
 /// Screen for booking and paying for a professional service
 class BookServiceScreen extends StatefulWidget {
   const BookServiceScreen({
@@ -47,7 +49,8 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Failed to initialize payment system: $e';
+          _errorMessage =
+              '${I18nService.translate("Failed to initialize payment system")}: $e';
         });
       }
     }
@@ -60,23 +63,23 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
   Future<void> _bookAndPay() async {
     if (!StripeService.isInitialized) {
       setState(() {
-        _errorMessage =
-            'Payment system not available. Please configure STRIPE_PUBLISHABLE_KEY.';
+        _errorMessage = I18nService.translate(
+            "Payment system not available. Please configure STRIPE_PUBLISHABLE_KEY.");
       });
       return;
     }
 
     if (widget.professional.stripeAccountId == null) {
       setState(() {
-        _errorMessage =
-            'Professional has not connected their Stripe account yet.';
+        _errorMessage = I18nService.translate(
+            "Professional has not connected their Stripe account yet.");
       });
       return;
     }
 
     if (_selectedDate == null) {
       setState(() {
-        _errorMessage = 'Please select a service date.';
+        _errorMessage = I18nService.translate("Please select a service date.");
       });
       return;
     }
@@ -89,7 +92,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
     try {
       final uid = AppFirebase.auth.currentUser?.uid;
       if (uid == null) {
-        throw Exception('User not authenticated');
+        throw Exception(I18nService.translate("User not authenticated"));
       }
 
       final idToken = await AppFirebase.auth.currentUser!.getIdToken();
@@ -112,7 +115,8 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
 
       if (response.statusCode != 200) {
         final error = jsonDecode(response.body);
-        throw Exception(error['error'] ?? 'Failed to create payment intent');
+        throw Exception(error['error'] ??
+            I18nService.translate("Failed to create payment intent"));
       }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -120,7 +124,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
       final paymentIntentId = data['data']?['paymentIntentId'] as String?;
 
       if (clientSecret == null) {
-        throw Exception('No client secret in response');
+        throw Exception(I18nService.translate("No client secret in response"));
       }
 
       // Initialize and present payment sheet
@@ -146,7 +150,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Booking confirmed! ${widget.professional.name} will contact you soon.',
+            '${I18nService.translate("Booking confirmed!")} ${widget.professional.name} ${I18nService.translate("will contact you soon.")}',
           ),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 5),
@@ -154,11 +158,13 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
       );
     } on StripeException catch (e) {
       setState(() {
-        _errorMessage = e.error.message ?? 'Payment failed. Please try again.';
+        _errorMessage = e.error.message ??
+            I18nService.translate("Payment failed. Please try again.");
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Booking failed: ${e.toString()}';
+        _errorMessage =
+            '${I18nService.translate("Booking failed")}: ${e.toString()}';
       });
     } finally {
       if (mounted) {
@@ -217,7 +223,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Book Service'),
+        title: Text(I18nService.translate("Book Service")),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -274,7 +280,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Service Details',
+                      I18nService.translate("Service Details"),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -285,7 +291,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Hours:'),
+                        Text(I18nService.translate("Hours:")),
                         Row(
                           children: [
                             IconButton(
@@ -315,7 +321,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Service Date:'),
+                        Text(I18nService.translate("Service Date:")),
                         OutlinedButton.icon(
                           onPressed: _selectDate,
                           icon: const Icon(Icons.calendar_today, size: 18),
@@ -323,7 +329,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                             _selectedDate != null
                                 ? DateFormat('MMM dd, yyyy')
                                     .format(_selectedDate!)
-                                : 'Select date',
+                                : I18nService.translate("Select date"),
                           ),
                         ),
                       ],
@@ -332,9 +338,10 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
 
                     // Notes
                     TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'Notes (optional)',
-                        hintText: 'Any special requests or details...',
+                      decoration: InputDecoration(
+                        labelText: I18nService.translate("Notes (optional)"),
+                        hintText: I18nService.translate(
+                            "Any special requests or details..."),
                         border: OutlineInputBorder(),
                       ),
                       maxLines: 3,
@@ -354,7 +361,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Pricing',
+                      I18nService.translate("Pricing"),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -373,7 +380,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Platform fee (10%)',
+                          I18nService.translate("Platform fee (10%)"),
                           style: TextStyle(color: Colors.grey[600]),
                         ),
                         Text(
@@ -387,7 +394,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Total',
+                          I18nService.translate("Total"),
                           style:
                               Theme.of(context).textTheme.titleLarge?.copyWith(
                                     fontWeight: FontWeight.bold,
@@ -454,7 +461,7 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Text(
-                      'Book & Pay \$${_grandTotal.toStringAsFixed(2)}',
+                      '${I18nService.translate("Book & Pay")} \$${_grandTotal.toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 16),
                     ),
             ),
@@ -475,8 +482,8 @@ class _BookServiceScreenState extends State<BookServiceScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'This professional has not connected their payment account yet. '
-                        'Please contact them directly.',
+                        I18nService.translate(
+                            "This professional has not connected their payment account yet. Please contact them directly."),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.orange.shade700,

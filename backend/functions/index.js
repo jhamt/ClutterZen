@@ -29,6 +29,156 @@ const GEMINI_IMAGE_MODELS = [
   "gemini-2.5-flash-image",
 ];
 
+function extractReplicateOutputUrl(rawOutput) {
+  if (!rawOutput) return null;
+  if (typeof rawOutput === "string") {
+    const value = rawOutput.trim();
+    return value || null;
+  }
+
+  if (Array.isArray(rawOutput)) {
+    for (const entry of rawOutput) {
+      if (typeof entry === "string" && entry.trim()) {
+        return entry.trim();
+      }
+      if (entry && typeof entry === "object") {
+        const nestedUrl = entry.url || entry.output || entry.image || entry.src;
+        if (typeof nestedUrl === "string" && nestedUrl.trim()) {
+          return nestedUrl.trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  if (typeof rawOutput === "object") {
+    const direct = rawOutput.url ||
+      rawOutput.output ||
+      rawOutput.image ||
+      rawOutput.src;
+    if (typeof direct === "string" && direct.trim()) {
+      return direct.trim();
+    }
+
+    if (Array.isArray(rawOutput.images)) {
+      return extractReplicateOutputUrl(rawOutput.images);
+    }
+  }
+
+  return null;
+}
+
+function inferImageExtension({contentType, sourceUrl}) {
+  const type = (contentType || "").toLowerCase();
+  if (type.includes("png")) return "png";
+  if (type.includes("webp")) return "webp";
+  if (type.includes("gif")) return "gif";
+  if (type.includes("jpeg") || type.includes("jpg")) return "jpg";
+
+  try {
+    const pathname = new URL(sourceUrl).pathname.toLowerCase();
+    if (pathname.endsWith(".png")) return "png";
+    if (pathname.endsWith(".webp")) return "webp";
+    if (pathname.endsWith(".gif")) return "gif";
+    if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "jpg";
+  } catch {
+    // Ignore URL parse errors, fallback below.
+  }
+
+  return "jpg";
+}
+
+function inferImageContentType(extension) {
+  switch ((extension || "").toLowerCase()) {
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    case "jpg":
+    case "jpeg":
+    default:
+      return "image/jpeg";
+  }
+}
+
+function buildFirebaseDownloadUrl(bucketName, storagePath, token) {
+  return (
+    `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/` +
+    `${encodeURIComponent(storagePath)}?alt=media&token=${token}`
+  );
+}
+
+async function persistOrganizedImageForUser({
+  sourceOutputUrl,
+  userId,
+  predictionId,
+}) {
+  const sourceResp = await fetch(sourceOutputUrl);
+  if (!sourceResp.ok) {
+    const err = new Error(
+        `Generated image download failed (${sourceResp.status})`,
+    );
+    err.code = "download_failed";
+    err.statusCode = 502;
+    throw err;
+  }
+
+  const contentTypeHeader = sourceResp.headers.get("content-type") || "";
+  const bytes = Buffer.from(await sourceResp.arrayBuffer());
+  if (!bytes.length) {
+    const err = new Error("Generated image download returned empty payload");
+    err.code = "download_failed";
+    err.statusCode = 502;
+    throw err;
+  }
+
+  const extension = inferImageExtension({
+    contentType: contentTypeHeader,
+    sourceUrl: sourceOutputUrl,
+  });
+  const contentType = inferImageContentType(extension);
+  const objectPath =
+    `organized_images/${userId}/${Date.now()}-${predictionId}.${extension}`;
+  const token = crypto.randomUUID ?
+    crypto.randomUUID() :
+    crypto.randomBytes(16).toString("hex");
+
+  const bucket = admin.storage().bucket();
+  const file = bucket.file(objectPath);
+
+  try {
+    await file.save(bytes, {
+      resumable: false,
+      metadata: {
+        contentType,
+        cacheControl: "public, max-age=31536000",
+        metadata: {
+          firebaseStorageDownloadTokens: token,
+          sourceOutputUrl,
+          predictionId,
+          generatedForUid: userId,
+        },
+      },
+    });
+  } catch (saveError) {
+    const err = new Error("Failed to upload generated image to storage");
+    err.code = "upload_failed";
+    err.statusCode = 500;
+    err.originalError = saveError;
+    throw err;
+  }
+
+  const outputUrl = buildFirebaseDownloadUrl(bucket.name, objectPath, token);
+  return {
+    outputUrl,
+    storagePath: objectPath,
+    bytesLength: bytes.length,
+    contentType,
+  };
+}
+
 function getGeminiApiKey() {
   return process.env.GEMINI_API_KEY || functions.config().gemini?.key || "";
 }
@@ -455,8 +605,14 @@ app.post("/replicate/generate", authenticate, async (req, res) => {
 
     const prediction = await predictionResp.json();
     const predictionId = prediction.id;
+    const uid = req.user.uid;
+    functions.logger.info("Replicate prediction created", {
+      uid,
+      predictionId,
+    });
 
-    let outputUrl = null;
+    let sourceOutputUrl = null;
+    let lastStatus = null;
     const maxAttempts = 60;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -476,21 +632,95 @@ app.post("/replicate/generate", authenticate, async (req, res) => {
       }
 
       const statusJson = await statusResp.json();
+      const status = statusJson.status;
+      if (status !== lastStatus) {
+        lastStatus = status;
+        functions.logger.info("Replicate prediction status", {
+          uid,
+          predictionId,
+          attempt: attempt + 1,
+          status,
+        });
+      }
+
       if (statusJson.status === "succeeded") {
-        outputUrl = Array.isArray(statusJson.output) ?
-          statusJson.output[0] :
-          statusJson.output;
+        sourceOutputUrl = extractReplicateOutputUrl(statusJson.output);
         break;
       } else if (["failed", "canceled"].includes(statusJson.status)) {
         return res.status(500).json({error: statusJson.error ?? statusJson.status});
       }
     }
 
-    if (!outputUrl) {
+    if (!sourceOutputUrl) {
+      functions.logger.error("Replicate output URL missing", {
+        uid,
+        predictionId,
+      });
+      return res.status(502).json({
+        error: "Generated image URL missing from provider response",
+      });
+    }
+
+    let sourceOutputHost = "unknown";
+    try {
+      sourceOutputHost = new URL(sourceOutputUrl).host;
+    } catch {
+      sourceOutputHost = "invalid";
+    }
+    functions.logger.info("Replicate output received", {
+      uid,
+      predictionId,
+      sourceOutputHost,
+    });
+
+    let persisted;
+    try {
+      persisted = await persistOrganizedImageForUser({
+        sourceOutputUrl,
+        userId: uid,
+        predictionId,
+      });
+    } catch (persistError) {
+      functions.logger.error("Replicate output persistence failed", {
+        uid,
+        predictionId,
+        code: persistError.code || "persist_failed",
+        message: persistError.message,
+      });
+      if (persistError.code === "download_failed") {
+        return res
+            .status(persistError.statusCode || 502)
+            .json({error: "Failed to download generated image"});
+      }
+      if (persistError.code === "upload_failed") {
+        return res
+            .status(persistError.statusCode || 500)
+            .json({error: "Failed to upload generated image"});
+      }
+      return res.status(500).json({error: "Failed to persist generated image"});
+    }
+
+    if (!persisted?.outputUrl) {
       return res.status(504).json({error: "Replicate generation timed out"});
     }
 
-    return res.json({data: {predictionId, outputUrl}});
+    functions.logger.info("Replicate output persisted", {
+      uid,
+      predictionId,
+      sourceOutputHost,
+      storagePath: persisted.storagePath,
+      bytesLength: persisted.bytesLength,
+      contentType: persisted.contentType,
+    });
+
+    return res.json({
+      data: {
+        predictionId,
+        outputUrl: persisted.outputUrl,
+        sourceOutputUrl,
+        storagePath: persisted.storagePath,
+      },
+    });
   } catch (error) {
     functions.logger.error("Replicate generate failed", error);
     return res.status(500).json({error: error.message});

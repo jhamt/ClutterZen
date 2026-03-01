@@ -6,6 +6,7 @@ import '../models/vision_models.dart';
 import '../models/gemini_models.dart';
 import '../app_firebase.dart';
 import '../env.dart';
+import 'functions_endpoint.dart';
 import 'vision_error_handler.dart';
 
 /// Service to call Firebase Cloud Functions for secure API proxy
@@ -36,11 +37,11 @@ class FirebaseFunctionsService {
   }
 
   /// Get ID token for authenticated requests
-  Future<String?> _getIdToken() async {
+  Future<String?> _getIdToken({bool forceRefresh = false}) async {
     try {
       final user = AppFirebase.auth.currentUser;
       if (user == null) return null;
-      return await user.getIdToken();
+      return await user.getIdToken(forceRefresh);
     } catch (e) {
       return null;
     }
@@ -56,10 +57,16 @@ class FirebaseFunctionsService {
     }
 
     VisionApiError? lastError;
+    final uri = FunctionsEndpoint.buildUri(
+      baseUrl: _baseUrl,
+      path: '/vision/analyze',
+    );
 
     for (int attempt = 1; attempt <= _retryConfig.maxAttempts; attempt++) {
       try {
-        final idToken = await _getIdToken();
+        final shouldForceRefreshToken = lastError?.statusCode == 401;
+        final idToken =
+            await _getIdToken(forceRefresh: shouldForceRefreshToken);
         final headers = <String, String>{
           'Content-Type': 'application/json',
         };
@@ -77,7 +84,7 @@ class FirebaseFunctionsService {
 
         final response = await _client
             .post(
-              Uri.parse('$_baseUrl/vision/analyze'),
+              uri,
               headers: headers,
               body: jsonEncode(body),
             )
@@ -155,15 +162,33 @@ class FirebaseFunctionsService {
 
         // Parse error response
         final error = VisionErrorHandler.parseErrorResponse(response);
+
+        if (FunctionsEndpoint.isLikelyHtml(response)) {
+          throw FunctionsEndpoint.buildRequestException(
+            response: response,
+            uri: uri,
+            fallbackMessage: 'Vision analyze request failed',
+          );
+        }
+
+        // Retry once with refreshed token on auth errors.
+        if (response.statusCode == 401 && attempt < _retryConfig.maxAttempts) {
+          lastError = error ??
+              VisionApiError(
+                statusCode: 401,
+                message: 'Authentication token expired',
+                isRetryable: true,
+                isRateLimit: false,
+              );
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+          continue;
+        }
+
         if (error == null) {
-          throw VisionApiError(
-            statusCode: response.statusCode,
-            message:
-                'Vision API failed: ${response.body.substring(0, response.body.length.clamp(0, 200))}',
-            isRetryable:
-                VisionErrorHandler.isRetryableError(response.statusCode),
-            isRateLimit:
-                VisionErrorHandler.isRateLimitError(response.statusCode),
+          throw FunctionsEndpoint.buildRequestException(
+            response: response,
+            uri: uri,
+            fallbackMessage: 'Vision analyze request failed',
           );
         }
 
@@ -229,10 +254,15 @@ class FirebaseFunctionsService {
         );
         await Future<void>.delayed(delay);
       } catch (e) {
-        if (e is VisionApiError) {
+        if (e is VisionApiError ||
+            e is FunctionsConfigException ||
+            e is FunctionsRequestException) {
           rethrow;
         }
-        throw Exception('Vision analysis via Firebase Function failed: $e');
+        throw FunctionsRequestException(
+          message: 'Vision analysis request failed. Please try again.',
+          uri: uri,
+        );
       }
     }
 
@@ -258,6 +288,10 @@ class FirebaseFunctionsService {
     required String imageUrl,
   }) async {
     try {
+      final uri = FunctionsEndpoint.buildUri(
+        baseUrl: _baseUrl,
+        path: '/replicate/generate',
+      );
       final idToken = await _getIdToken();
       final headers = <String, String>{
         'Content-Type': 'application/json',
@@ -269,7 +303,7 @@ class FirebaseFunctionsService {
 
       final response = await _client
           .post(
-            Uri.parse('$_baseUrl/replicate/generate'),
+            uri,
             headers: headers,
             body: jsonEncode({'imageUrl': imageUrl}),
           )
@@ -277,21 +311,65 @@ class FirebaseFunctionsService {
               const Duration(seconds: 120)); // Longer timeout for generation
 
       if (response.statusCode != 200) {
-        throw Exception(
-            'Replicate API failed: ${response.statusCode} ${response.body}');
+        throw FunctionsEndpoint.buildRequestException(
+          response: response,
+          uri: uri,
+          fallbackMessage: 'Image generation request failed',
+        );
       }
 
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      final data = decoded['data'] as Map<String, dynamic>;
-      final outputUrl = data['outputUrl'] as String;
+      final dataRaw = decoded['data'];
+      if (dataRaw is! Map<String, dynamic>) {
+        throw FunctionsRequestException(
+          message:
+              'After-image API returned no response payload. Please regenerate.',
+          statusCode: response.statusCode,
+          uri: uri,
+          serverMessage: response.body,
+        );
+      }
+      final outputUrlRaw = dataRaw['outputUrl'] ?? dataRaw['sourceOutputUrl'];
+      if (outputUrlRaw is! String) {
+        throw FunctionsRequestException(
+          message:
+              'After-image API returned no valid output URL. Please regenerate.',
+          statusCode: response.statusCode,
+          uri: uri,
+          serverMessage: response.body,
+        );
+      }
+      final outputUrl = outputUrlRaw.trim();
 
       if (outputUrl.isEmpty) {
-        throw Exception('Replicate returned empty output URL');
+        throw FunctionsRequestException(
+          message: 'After-image API returned an empty output URL.',
+          statusCode: response.statusCode,
+          uri: uri,
+          serverMessage: response.body,
+        );
+      }
+      final parsed = Uri.tryParse(outputUrl);
+      if (parsed == null ||
+          !(parsed.isScheme('https') || parsed.isScheme('http')) ||
+          parsed.host.isEmpty) {
+        throw FunctionsRequestException(
+          message:
+              'Image generation returned an unusable URL. Please try again.',
+          statusCode: response.statusCode,
+          uri: uri,
+          serverMessage: outputUrl,
+        );
       }
 
       return outputUrl;
     } catch (e) {
-      throw Exception('Replicate generation via Firebase Function failed: $e');
+      if (e is FunctionsConfigException || e is FunctionsRequestException) {
+        rethrow;
+      }
+      throw FunctionsRequestException(
+        message: 'Image generation failed. Please try again.',
+      );
     }
   }
 
@@ -302,6 +380,10 @@ class FirebaseFunctionsService {
     double? clutterScore,
   }) async {
     try {
+      final uri = FunctionsEndpoint.buildUri(
+        baseUrl: _baseUrl,
+        path: '/gemini/recommend',
+      );
       final idToken = await _getIdToken();
       final headers = <String, String>{
         'Content-Type': 'application/json',
@@ -312,7 +394,7 @@ class FirebaseFunctionsService {
 
       final response = await _client
           .post(
-            Uri.parse('$_baseUrl/gemini/recommend'),
+            uri,
             headers: headers,
             body: jsonEncode({
               'spaceDescription': spaceDescription,
@@ -323,18 +405,30 @@ class FirebaseFunctionsService {
           .timeout(const Duration(seconds: 45));
 
       if (response.statusCode != 200) {
-        throw Exception(
-            'Gemini recommendation failed: ${response.statusCode} ${response.body}');
+        throw FunctionsEndpoint.buildRequestException(
+          response: response,
+          uri: uri,
+          fallbackMessage: 'Recommendations request failed',
+        );
       }
 
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
       final data = decoded['data'];
       if (data is! Map<String, dynamic>) {
-        throw Exception('Gemini recommendation response missing data object');
+        throw FunctionsRequestException(
+          message: 'Recommendations response is missing data.',
+          statusCode: response.statusCode,
+          uri: uri,
+        );
       }
       return GeminiRecommendation.fromJson(data);
     } catch (e) {
-      throw Exception('Gemini recommendation via Firebase Function failed: $e');
+      if (e is FunctionsConfigException || e is FunctionsRequestException) {
+        rethrow;
+      }
+      throw FunctionsRequestException(
+        message: 'Recommendations failed. Please try again.',
+      );
     }
   }
 
@@ -343,6 +437,10 @@ class FirebaseFunctionsService {
     required String prompt,
   }) async {
     try {
+      final uri = FunctionsEndpoint.buildUri(
+        baseUrl: _baseUrl,
+        path: '/gemini/image-fallback',
+      );
       final idToken = await _getIdToken();
       final headers = <String, String>{
         'Content-Type': 'application/json',
@@ -353,27 +451,39 @@ class FirebaseFunctionsService {
 
       final response = await _client
           .post(
-            Uri.parse('$_baseUrl/gemini/image-fallback'),
+            uri,
             headers: headers,
             body: jsonEncode({'prompt': prompt}),
           )
           .timeout(const Duration(seconds: 120));
 
       if (response.statusCode != 200) {
-        throw Exception(
-            'Gemini image fallback failed: ${response.statusCode} ${response.body}');
+        throw FunctionsEndpoint.buildRequestException(
+          response: response,
+          uri: uri,
+          fallbackMessage: 'Image fallback request failed',
+        );
       }
 
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
       final data = decoded['data'];
       if (data is! Map<String, dynamic>) {
-        throw Exception('Gemini image fallback response missing data object');
+        throw FunctionsRequestException(
+          message: 'Image fallback response is missing data.',
+          statusCode: response.statusCode,
+          uri: uri,
+        );
       }
       final base64Image = data['imageBase64']?.toString();
       if (base64Image == null || base64Image.isEmpty) return null;
       return base64Decode(base64Image);
     } catch (e) {
-      throw Exception('Gemini image fallback via Firebase Function failed: $e');
+      if (e is FunctionsConfigException || e is FunctionsRequestException) {
+        rethrow;
+      }
+      throw FunctionsRequestException(
+        message: 'Image fallback generation failed. Please try again.',
+      );
     }
   }
 }

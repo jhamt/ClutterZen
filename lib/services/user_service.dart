@@ -2,10 +2,12 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../app_firebase.dart';
 import '../env.dart';
+import 'functions_endpoint.dart';
 
 class UserService {
   static String get _baseUrl => Env.firebaseFunctionsUrl;
@@ -94,17 +96,7 @@ class UserService {
     FirebaseFirestore? firestore,
   }) async {
     if (firestore == null) {
-      final headers = await _authHeaders();
-      final response = await http.post(
-        Uri.parse('$_baseUrl/user/credits/consume'),
-        headers: headers,
-      );
-      if (response.statusCode != 200) {
-        throw Exception(
-          'Failed to consume credit: ${response.statusCode} ${response.body}',
-        );
-      }
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final decoded = await _postWithAuth('/user/credits/consume');
       final data = decoded['data'] as Map<String, dynamic>? ?? {};
       return data['success'] == true;
     }
@@ -135,16 +127,7 @@ class UserService {
     FirebaseFirestore? firestore,
   }) async {
     if (firestore == null) {
-      final headers = await _authHeaders();
-      final response = await http.post(
-        Uri.parse('$_baseUrl/user/credits/refund'),
-        headers: headers,
-      );
-      if (response.statusCode != 200) {
-        throw Exception(
-          'Failed to refund credit: ${response.statusCode} ${response.body}',
-        );
-      }
+      await _postWithAuth('/user/credits/refund');
       return;
     }
 
@@ -170,16 +153,7 @@ class UserService {
     String? uid,
   }) async {
     if (firestore == null) {
-      final headers = await _authHeaders();
-      final response = await http.post(
-        Uri.parse('$_baseUrl/user/plan/set-free'),
-        headers: headers,
-      );
-      if (response.statusCode != 200) {
-        throw Exception(
-          'Failed to set free plan: ${response.statusCode} ${response.body}',
-        );
-      }
+      await _postWithAuth('/user/plan/set-free');
       return;
     }
 
@@ -193,5 +167,56 @@ class UserService {
       resetUsage: true,
       firestore: firestore,
     );
+  }
+
+  static Future<Map<String, dynamic>> _postWithAuth(
+    String endpointPath, {
+    Map<String, dynamic>? body,
+  }) async {
+    final headers = await _authHeaders();
+    final uri = FunctionsEndpoint.buildUri(
+      baseUrl: _baseUrl,
+      path: endpointPath,
+    );
+
+    final response = await http.post(
+      uri,
+      headers: headers,
+      body: body == null ? null : jsonEncode(body),
+    );
+
+    if (response.statusCode != 200) {
+      throw FunctionsEndpoint.buildRequestException(
+        response: response,
+        uri: uri,
+      );
+    }
+
+    final raw = response.body.trim();
+    if (raw.isEmpty) {
+      return const <String, dynamic>{};
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      throw FunctionsRequestException(
+        message: 'Server returned unexpected response format.',
+        statusCode: response.statusCode,
+        uri: uri,
+      );
+    } catch (e) {
+      if (e is FunctionsRequestException) rethrow;
+      if (kDebugMode) {
+        debugPrint('Invalid JSON response from $uri: ${response.body}');
+      }
+      throw FunctionsRequestException(
+        message: 'Server returned invalid JSON response.',
+        statusCode: response.statusCode,
+        uri: uri,
+      );
+    }
   }
 }

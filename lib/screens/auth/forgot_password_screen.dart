@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app_firebase.dart';
+import '../../services/i18n_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -25,8 +26,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Forgot Password',
+        title: Text(
+          I18nService.translate("Forgot Password"),
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -38,17 +39,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            'Enter your email and we\'ll send a reset link.',
+          Text(
+            I18nService.translate(
+                "Enter your email and we'll send a reset link."),
             style: TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 24),
           TextField(
             controller: _email,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              hintText: 'Enter your email',
+            decoration: InputDecoration(
+              labelText: I18nService.translate("Email"),
+              hintText: I18nService.translate("Enter your email"),
               filled: true,
               fillColor: Color(0xFFF2F4F7),
               border: OutlineInputBorder(
@@ -63,24 +65,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: _msg!.contains('Failed') 
-                    ? Colors.red.shade50 
+                color: _msg!.contains('Failed')
+                    ? Colors.red.shade50
                     : Colors.green.shade50,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: _msg!.contains('Failed') 
-                      ? Colors.red.shade200 
+                  color: _msg!.contains('Failed')
+                      ? Colors.red.shade200
                       : Colors.green.shade200,
                 ),
               ),
               child: Row(
                 children: [
                   Icon(
-                    _msg!.contains('Failed') 
-                        ? Icons.error_outline 
+                    _msg!.contains('Failed')
+                        ? Icons.error_outline
                         : Icons.check_circle_outline,
-                    color: _msg!.contains('Failed') 
-                        ? Colors.red.shade700 
+                    color: _msg!.contains('Failed')
+                        ? Colors.red.shade700
                         : Colors.green.shade700,
                     size: 20,
                   ),
@@ -89,8 +91,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     child: Text(
                       _msg!,
                       style: TextStyle(
-                        color: _msg!.contains('Failed') 
-                            ? Colors.red.shade700 
+                        color: _msg!.contains('Failed')
+                            ? Colors.red.shade700
                             : Colors.green.shade700,
                       ),
                     ),
@@ -129,7 +131,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         color: Colors.white,
                       ),
                     )
-                  : const Text('Send Reset Link'),
+                  : Text(I18nService.translate("Send Reset Link")),
             ),
           ),
         ],
@@ -145,11 +147,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     try {
       await AppFirebase.auth.sendPasswordResetEmail(email: _email.text.trim());
       setState(() {
-        _msg = 'Reset email sent.';
+        _msg = I18nService.translate("Reset email sent.");
       });
     } catch (e) {
       setState(() {
-        _msg = 'Failed: $e';
+        _msg = '${I18nService.translate("Failed")}: $e';
       });
     } finally {
       if (mounted) {

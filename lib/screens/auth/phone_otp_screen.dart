@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import '../../app_firebase.dart';
 import '../../services/user_service.dart';
 
+import '../../services/i18n_service.dart';
+
 class PhoneOtpScreen extends StatefulWidget {
   const PhoneOtpScreen({super.key});
 
@@ -31,8 +33,8 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Sign in with Phone',
+        title: Text(
+          I18nService.translate("Sign in with Phone"),
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
         iconTheme: const IconThemeData(color: Colors.black),
@@ -66,9 +68,9 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
           TextField(
               controller: _phone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                  hintText: '+1 555 123 4567',
-                  labelText: 'Phone Number',
+              decoration: InputDecoration(
+                  hintText: I18nService.translate("+1 555 123 4567"),
+                  labelText: I18nService.translate("Phone Number"),
                   filled: true,
                   fillColor: Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -107,7 +109,7 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
                                 strokeWidth: 2,
                                 color: Colors.white,
                               ))
-                          : const Text('Send Code'))),
+                          : Text(I18nService.translate("Send Code")))),
             ),
             const SizedBox(width: 8),
             Container(
@@ -133,8 +135,8 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
                       borderRadius: BorderRadius.circular(24),
                     ),
                   ),
-                  child: const Text(
-                    'Resend',
+                  child: Text(
+                    I18nService.translate("Resend"),
                     style: TextStyle(fontWeight: FontWeight.w600),
                   )),
             ),
@@ -143,9 +145,9 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
           TextField(
               controller: _code,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                  hintText: '123456',
-                  labelText: 'Verification Code',
+              decoration: InputDecoration(
+                  hintText: I18nService.translate("123456"),
+                  labelText: I18nService.translate("Verification Code"),
                   filled: true,
                   fillColor: Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -182,7 +184,7 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
                           strokeWidth: 2,
                           color: Colors.white,
                         ))
-                    : const Text('Verify & Sign In')),
+                    : Text(I18nService.translate("Verify & Sign In"))),
           ),
         ],
       ),
@@ -201,23 +203,26 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
           try {
             await _signInWithCredential(cred);
             if (mounted) {
-              setState(() => _msg = 'Signed in automatically.');
+              setState(() =>
+                  _msg = I18nService.translate("Signed in automatically."));
             }
           } catch (e) {
-            if (mounted) setState(() => _msg = 'Failed: $e');
+            if (mounted) {
+              setState(() => _msg = '${I18nService.translate("Failed")}: $e');
+            }
           }
         },
         verificationFailed: (e) => setState(() => _msg = e.message),
         codeSent: (verificationId, resendToken) => setState(() {
           _verificationId = verificationId;
           _resendToken = resendToken;
-          _msg = 'Code sent.';
+          _msg = I18nService.translate("Code sent.");
         }),
         codeAutoRetrievalTimeout: (verificationId) =>
             setState(() => _verificationId = verificationId),
       );
     } catch (e) {
-      setState(() => _msg = 'Failed: $e');
+      setState(() => _msg = '${I18nService.translate("Failed")}: $e');
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -225,7 +230,7 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
 
   Future<void> _verify() async {
     if (_verificationId == null) {
-      setState(() => _msg = 'Request a code first.');
+      setState(() => _msg = I18nService.translate("Request a code first."));
       return;
     }
     setState(() {
@@ -237,12 +242,13 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
           verificationId: _verificationId!, smsCode: _code.text.trim());
       await _signInWithCredential(cred);
       if (mounted) {
-        setState(() => _msg = 'Signed in successfully.');
+        setState(() => _msg = I18nService.translate("Signed in successfully."));
       }
     } on FirebaseAuthException catch (e) {
-      setState(() => _msg = e.message ?? 'Failed: ${e.code}');
+      setState(() =>
+          _msg = e.message ?? '${I18nService.translate("Failed")}: ${e.code}');
     } catch (e) {
-      setState(() => _msg = 'Failed: $e');
+      setState(() => _msg = '${I18nService.translate("Failed")}: $e');
     } finally {
       if (mounted) setState(() => _verifying = false);
     }
@@ -262,23 +268,26 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
           try {
             await _signInWithCredential(cred);
             if (mounted) {
-              setState(() => _msg = 'Signed in automatically.');
+              setState(() =>
+                  _msg = I18nService.translate("Signed in automatically."));
             }
           } catch (e) {
-            if (mounted) setState(() => _msg = 'Failed: $e');
+            if (mounted) {
+              setState(() => _msg = '${I18nService.translate("Failed")}: $e');
+            }
           }
         },
         verificationFailed: (e) => setState(() => _msg = e.message),
         codeSent: (verificationId, resendToken) => setState(() {
           _verificationId = verificationId;
           _resendToken = resendToken;
-          _msg = 'Code re-sent.';
+          _msg = I18nService.translate("Code re-sent.");
         }),
         codeAutoRetrievalTimeout: (verificationId) =>
             setState(() => _verificationId = verificationId),
       );
     } catch (e) {
-      setState(() => _msg = 'Failed: $e');
+      setState(() => _msg = '${I18nService.translate("Failed")}: $e');
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -295,11 +304,13 @@ class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
-        setState(() => _msg = e.message ?? 'Authentication failed: ${e.code}');
+        setState(() => _msg = e.message ??
+            '${I18nService.translate("Authentication failed")}: ${e.code}');
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _msg = 'Failed to sign in: $e');
+        setState(
+            () => _msg = '${I18nService.translate("Failed to sign in")}: $e');
       }
     }
   }

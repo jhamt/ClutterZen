@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../app_firebase.dart';
 
+import '../../services/i18n_service.dart';
+
 class UpdateProfileScreen extends StatefulWidget {
   const UpdateProfileScreen({super.key});
 
@@ -18,14 +20,14 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Update Profile')),
+      appBar: AppBar(title: Text(I18nService.translate("Update Profile"))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextField(
               controller: _name,
-              decoration: const InputDecoration(
-                  hintText: 'Full Name',
+              decoration: InputDecoration(
+                  hintText: I18nService.translate("Full Name"),
                   filled: true,
                   fillColor: Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -42,7 +44,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Save')),
+                  : Text(I18nService.translate("Save"))),
         ],
       ),
     );
@@ -57,11 +59,11 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
       await AppFirebase.auth.currentUser?.updateDisplayName(_name.text.trim());
       await AppFirebase.auth.currentUser?.reload();
       setState(() {
-        _msg = 'Updated.';
+        _msg = I18nService.translate("Updated.");
       });
     } catch (e) {
       setState(() {
-        _msg = 'Failed: $e';
+        _msg = '${I18nService.translate("Failed")}: $e';
       });
     } finally {
       if (mounted) {

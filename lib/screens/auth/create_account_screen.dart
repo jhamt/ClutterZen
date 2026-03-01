@@ -7,6 +7,8 @@ import '../../app_firebase.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 
+import '../../services/i18n_service.dart';
+
 class CreateAccountScreen extends StatefulWidget {
   const CreateAccountScreen({super.key});
 
@@ -69,16 +71,16 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     String strengthText;
     Color strengthColor;
     if (strength <= 2) {
-      strengthText = 'Weak';
+      strengthText = I18nService.translate("Weak");
       strengthColor = Colors.red;
     } else if (strength <= 3) {
-      strengthText = 'Fair';
+      strengthText = I18nService.translate("Fair");
       strengthColor = Colors.orange;
     } else if (strength <= 4) {
-      strengthText = 'Good';
+      strengthText = I18nService.translate("Good");
       strengthColor = Colors.blue;
     } else {
-      strengthText = 'Strong';
+      strengthText = I18nService.translate("Strong");
       strengthColor = Colors.green;
     }
 
@@ -98,8 +100,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Sign up Account',
+        title: Text(
+          I18nService.translate("Sign up Account"),
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
@@ -111,8 +113,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           TextButton(
             onPressed: () => Navigator.of(context)
                 .pushNamedAndRemoveUntil('/home', (route) => false),
-            child: const Text(
-              'Skip',
+            child: Text(
+              I18nService.translate("Skip"),
               style: TextStyle(color: Colors.black),
             ),
           ),
@@ -126,7 +128,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             children: [
               const SizedBox(height: 16),
               Text(
-                'Sign up Account',
+                I18nService.translate("Sign up Account"),
                 textAlign: TextAlign.center,
                 style: Theme.of(context)
                     .textTheme
@@ -134,10 +136,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Join now for a faster, smarter shopping experience.',
+              Text(
+                I18nService.translate(
+                    "Join now for a faster, smarter shopping experience."),
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: const TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 24),
               if (_error != null)
@@ -166,8 +169,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               TextFormField(
                 controller: _name,
                 decoration: InputDecoration(
-                  labelText: 'Full Name',
-                  hintText: 'Enter your name',
+                  labelText: I18nService.translate("Full Name"),
+                  hintText: I18nService.translate("Enter your name"),
                   filled: true,
                   fillColor: const Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -177,7 +180,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your full name';
+                    return I18nService.translate("Please enter your full name");
                   }
                   return null;
                 },
@@ -187,8 +190,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
-                  labelText: 'Email',
-                  hintText: 'Enter your email',
+                  labelText: I18nService.translate("Email"),
+                  hintText: I18nService.translate("Enter your email"),
                   filled: true,
                   fillColor: const Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -198,11 +201,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your email';
+                    return I18nService.translate("Please enter your email");
                   }
                   if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
                       .hasMatch(value.trim())) {
-                    return 'Please enter a valid email address';
+                    return I18nService.translate(
+                        "Please enter a valid email address");
                   }
                   return null;
                 },
@@ -212,8 +216,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 controller: _password,
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
-                  labelText: 'Password',
-                  hintText: 'Enter your password',
+                  labelText: I18nService.translate("Password"),
+                  hintText: I18nService.translate("Enter your password"),
                   filled: true,
                   fillColor: const Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -234,10 +238,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter a password';
+                    return I18nService.translate("Please enter a password");
                   }
                   if (value.length < 8) {
-                    return 'Password must be at least 8 characters';
+                    return I18nService.translate(
+                        "Password must be at least 8 characters");
                   }
                   return null;
                 },
@@ -248,7 +253,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   children: [
                     const SizedBox(width: 12),
                     Text(
-                      'Password strength: ',
+                      I18nService.translate("Password strength: "),
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                     Text(
@@ -267,8 +272,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 controller: _confirmPassword,
                 obscureText: _obscureConfirmPassword,
                 decoration: InputDecoration(
-                  labelText: 'Confirm Password',
-                  hintText: 'Re-enter your password',
+                  labelText: I18nService.translate("Confirm Password"),
+                  hintText: I18nService.translate("Re-enter your password"),
                   filled: true,
                   fillColor: const Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -290,10 +295,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please confirm your password';
+                    return I18nService.translate(
+                        "Please confirm your password");
                   }
                   if (value != _password.text) {
-                    return 'Passwords do not match';
+                    return I18nService.translate("Passwords do not match");
                   }
                   return null;
                 },
@@ -303,8 +309,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 controller: _phone,
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
-                  labelText: 'Phone Number (Optional)',
-                  hintText: 'Enter your phone number',
+                  labelText: I18nService.translate("Phone Number (Optional)"),
+                  hintText: I18nService.translate("Enter your phone number"),
                   filled: true,
                   fillColor: const Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -345,15 +351,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Sign up'),
+                      : Text(I18nService.translate("Sign up")),
                 ),
               ),
               const SizedBox(height: 16),
-              Row(children: const [
+              Row(children: [
                 Expanded(child: Divider()),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: Text('OR'),
+                  child: Text(I18nService.translate("OR")),
                 ),
                 Expanded(child: Divider()),
               ]),
@@ -389,8 +395,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         height: 20,
                       ),
                       const SizedBox(width: 12),
-                      const Text(
-                        'Continue with Google',
+                      Text(
+                        I18nService.translate("Continue with Google"),
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ],
@@ -421,13 +427,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.apple, size: 30),
                         SizedBox(width: 12),
                         Text(
-                          'Continue with Apple',
+                          I18nService.translate("Continue with Apple"),
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ],
@@ -438,11 +444,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text("Already have an account? "),
+                  Text(I18nService.translate("Already have an account? ")),
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
-                    child: const Text(
-                      'Sign in',
+                    child: Text(
+                      I18nService.translate("Sign in"),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.black,
@@ -478,8 +484,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
       if (nameQuery.docs.isNotEmpty) {
         setState(() {
-          _error =
-              'This name is already taken. Please choose a different name.';
+          _error = I18nService.translate(
+              "This name is already taken. Please choose a different name.");
           _loading = false;
         });
         return;
@@ -514,21 +520,23 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     } on FirebaseAuthException catch (e) {
-      String errorMessage = 'Failed to create account';
+      String errorMessage = I18nService.translate("Failed to create account");
       if (e.code == 'email-already-in-use') {
-        errorMessage =
-            'This email is already registered. Please sign in instead.';
+        errorMessage = I18nService.translate(
+            "This email is already registered. Please sign in instead.");
       } else if (e.code == 'weak-password') {
-        errorMessage =
-            'Password is too weak. Please choose a stronger password.';
+        errorMessage = I18nService.translate(
+            "Password is too weak. Please choose a stronger password.");
       } else if (e.code == 'invalid-email') {
-        errorMessage = 'Invalid email address. Please check and try again.';
+        errorMessage = I18nService.translate(
+            "Invalid email address. Please check and try again.");
       } else {
-        errorMessage = 'Failed: ${e.message ?? e.code}';
+        errorMessage =
+            '${I18nService.translate("Failed")}: ${e.message ?? e.code}';
       }
       setState(() => _error = errorMessage);
     } catch (e) {
-      setState(() => _error = 'Failed: $e');
+      setState(() => _error = '${I18nService.translate("Failed")}: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -548,7 +556,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             .pushNamedAndRemoveUntil('/home', (route) => false);
       }
     } on FirebaseAuthException catch (e) {
-      error = 'Failed: ${e.message ?? e.code}';
+      error = _socialAuthErrorMessage(e);
     } catch (e) {
       error = 'Failed: $e';
     } finally {
@@ -571,7 +579,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       if (!_appleAvailable) {
         throw FirebaseAuthException(
           code: 'apple-sign-in-unavailable',
-          message: 'Sign in with Apple is not supported on this device.',
+          message: I18nService.translate(
+              "Sign in with Apple is not supported on this device."),
         );
       }
       final cred = await AuthService(AppFirebase.auth).signInWithApple();
@@ -581,9 +590,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             .pushNamedAndRemoveUntil('/home', (route) => false);
       }
     } on FirebaseAuthException catch (e) {
-      error = 'Failed: ${e.message ?? e.code}';
+      error = _socialAuthErrorMessage(e);
     } catch (e) {
-      error = 'Failed: $e';
+      error = '${I18nService.translate("Failed")}: $e';
     } finally {
       if (mounted) {
         setState(() {
@@ -592,5 +601,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         });
       }
     }
+  }
+
+  String _socialAuthErrorMessage(FirebaseAuthException e) {
+    if (e.code == 'canceled') {
+      return e.message ??
+          I18nService.translate("Sign-in was canceled or interrupted.");
+    }
+    return '${I18nService.translate("Failed")}: ${e.message ?? e.code}';
   }
 }

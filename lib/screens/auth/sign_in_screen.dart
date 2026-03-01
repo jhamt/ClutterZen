@@ -6,6 +6,8 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart' as siwa;
 
 import '../../services/auth_service.dart';
 
+import '../../services/i18n_service.dart';
+
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
@@ -40,8 +42,8 @@ class _SignInScreenState extends State<SignInScreen> {
           TextButton(
             onPressed: () => Navigator.of(context)
                 .pushNamedAndRemoveUntil('/home', (route) => false),
-            child: const Text(
-              'Skip',
+            child: Text(
+              I18nService.translate("Skip"),
               style: TextStyle(color: Colors.black),
             ),
           ),
@@ -54,17 +56,18 @@ class _SignInScreenState extends State<SignInScreen> {
             const SizedBox(height: 16),
             Image.asset('assets/clutterzen-logo-color.png', height: 72),
             const SizedBox(height: 16),
-            Text('Welcome back',
+            Text(I18nService.translate("Welcome back"),
                 textAlign: TextAlign.center,
                 style: Theme.of(context)
                     .textTheme
                     .headlineSmall
                     ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text(
-              'Access your orders, wishlist, and exclusive offers by logging in.',
+            Text(
+              I18nService.translate(
+                  "Access your orders, wishlist, and exclusive offers by logging in."),
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
+              style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 16),
             if (_error != null)
@@ -94,7 +97,7 @@ class _SignInScreenState extends State<SignInScreen> {
               controller: _email,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                hintText: 'Email',
+                hintText: I18nService.translate("Email"),
                 filled: true,
                 fillColor: const Color(0xFFF2F4F7),
                 border: OutlineInputBorder(
@@ -136,7 +139,7 @@ class _SignInScreenState extends State<SignInScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text('Sign in'),
+                    : Text(I18nService.translate("Sign in")),
               ),
             ),
             const SizedBox(height: 8),
@@ -145,18 +148,18 @@ class _SignInScreenState extends State<SignInScreen> {
               child: TextButton(
                 onPressed: () =>
                     Navigator.of(context).pushNamed('/forgot-password'),
-                child: const Text(
-                  'Forgot password?',
+                child: Text(
+                  I18nService.translate("Forgot password?"),
                   style: TextStyle(color: Colors.black),
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            Row(children: const [
+            Row(children: [
               Expanded(child: Divider()),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Text('OR'),
+                child: Text(I18nService.translate("OR")),
               ),
               Expanded(child: Divider()),
             ]),
@@ -192,8 +195,8 @@ class _SignInScreenState extends State<SignInScreen> {
                       height: 20,
                     ),
                     const SizedBox(width: 12),
-                    const Text(
-                      'Continue with Google',
+                    Text(
+                      I18nService.translate("Continue with Google"),
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -224,13 +227,13 @@ class _SignInScreenState extends State<SignInScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.apple, size: 30),
                       SizedBox(width: 12),
                       Text(
-                        'Continue with Apple',
+                        I18nService.translate("Continue with Apple"),
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ],
@@ -262,13 +265,13 @@ class _SignInScreenState extends State<SignInScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.smartphone_rounded, size: 25),
                     SizedBox(width: 12),
                     Text(
-                      'Continue with Phone',
+                      I18nService.translate("Continue with Phone"),
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -277,11 +280,11 @@ class _SignInScreenState extends State<SignInScreen> {
             ),
             const SizedBox(height: 24),
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Text("Don't have an account? "),
+              Text(I18nService.translate("Don't have an account? ")),
               GestureDetector(
                   onTap: () =>
                       Navigator.of(context).pushNamed('/create-account'),
-                  child: const Text('Sign Up here',
+                  child: Text(I18nService.translate("Sign Up here"),
                       style: TextStyle(fontWeight: FontWeight.bold))),
             ]),
           ],
@@ -304,20 +307,23 @@ class _SignInScreenState extends State<SignInScreen> {
       await _handleSignedIn(cred);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found') {
-        errorMessage =
-            'No account found with this email. Please sign up first.';
+        errorMessage = I18nService.translate(
+            "No account found with this email. Please sign up first.");
       } else if (e.code == 'wrong-password') {
-        errorMessage = 'Incorrect password. Please try again.';
-      } else if (e.code == 'invalid-email') {
-        errorMessage = 'Invalid email address. Please check and try again.';
-      } else if (e.code == 'user-disabled') {
         errorMessage =
-            'This account has been disabled. Please contact support.';
+            I18nService.translate("Incorrect password. Please try again.");
+      } else if (e.code == 'invalid-email') {
+        errorMessage = I18nService.translate(
+            "Invalid email address. Please check and try again.");
+      } else if (e.code == 'user-disabled') {
+        errorMessage = I18nService.translate(
+            "This account has been disabled. Please contact support.");
       } else {
-        errorMessage = 'Failed to sign in: ${e.message ?? e.code}';
+        errorMessage =
+            '${I18nService.translate("Failed to sign in")}: ${e.message ?? e.code}';
       }
     } catch (e) {
-      errorMessage = 'Failed to sign in: $e';
+      errorMessage = '${I18nService.translate("Failed to sign in")}: $e';
     } finally {
       if (mounted) {
         setState(() {
@@ -338,7 +344,7 @@ class _SignInScreenState extends State<SignInScreen> {
       final cred = await AuthService(AppFirebase.auth).signInWithGoogle();
       await _handleSignedIn(cred);
     } on FirebaseAuthException catch (e) {
-      errorMessage = 'Failed: ${e.message ?? e.code}';
+      errorMessage = _socialAuthErrorMessage(e);
     } catch (e) {
       errorMessage = 'Failed: $e';
     } finally {
@@ -361,15 +367,16 @@ class _SignInScreenState extends State<SignInScreen> {
       if (!_appleAvailable) {
         throw FirebaseAuthException(
           code: 'apple-sign-in-unavailable',
-          message: 'Sign in with Apple is not supported on this device.',
+          message: I18nService.translate(
+              "Sign in with Apple is not supported on this device."),
         );
       }
       final cred = await AuthService(AppFirebase.auth).signInWithApple();
       await _handleSignedIn(cred);
     } on FirebaseAuthException catch (e) {
-      errorMessage = 'Failed: ${e.message ?? e.code}';
+      errorMessage = _socialAuthErrorMessage(e);
     } catch (e) {
-      errorMessage = 'Failed: $e';
+      errorMessage = '${I18nService.translate("Failed")}: $e';
     } finally {
       if (mounted) {
         setState(() {
@@ -385,6 +392,14 @@ class _SignInScreenState extends State<SignInScreen> {
     if (mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     }
+  }
+
+  String _socialAuthErrorMessage(FirebaseAuthException e) {
+    if (e.code == 'canceled') {
+      return e.message ??
+          I18nService.translate("Sign-in was canceled or interrupted.");
+    }
+    return '${I18nService.translate("Failed")}: ${e.message ?? e.code}';
   }
 }
 
@@ -403,7 +418,7 @@ class _PasswordFieldState extends State<_PasswordField> {
       controller: widget.controller,
       obscureText: _obscure,
       decoration: InputDecoration(
-        hintText: 'Password',
+        hintText: I18nService.translate("Password"),
         filled: true,
         fillColor: const Color(0xFFF2F4F7),
         border: OutlineInputBorder(

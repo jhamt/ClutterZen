@@ -36,33 +36,75 @@ class AuthService {
 
     await _ensureGoogleInitialized();
     try {
-      final GoogleSignInAccount account = await GoogleSignIn.instance
-          .authenticate(scopeHint: const ['email']);
-      final GoogleSignInAuthentication tokens = account.authentication;
-      final String? idToken = tokens.idToken;
-      if (idToken == null || idToken.isEmpty) {
-        throw const GoogleSignInException(
-          code: GoogleSignInExceptionCode.unknownError,
-          description: 'Missing ID token from Google sign-in.',
-        );
-      }
-      final credential = GoogleAuthProvider.credential(
-        idToken: idToken,
-      );
-      return _auth.signInWithCredential(credential);
+      return _authenticateGoogleUser();
     } on GoogleSignInException catch (e) {
       final code = e.code;
-      if (code == GoogleSignInExceptionCode.canceled) {
+      final description = e.description?.trim();
+      if ((code == GoogleSignInExceptionCode.canceled ||
+              code == GoogleSignInExceptionCode.interrupted) &&
+          _isGoogleAccountReauthFailure(description)) {
+        try {
+          // Clear any stale credential state and retry once.
+          await GoogleSignIn.instance.signOut();
+          return _authenticateGoogleUser();
+        } on GoogleSignInException catch (_) {
+          // Fall through to a clear actionable error.
+        }
+        throw FirebaseAuthException(
+          code: 'clientConfigurationError',
+          message:
+              'Google sign-in failed due to account reauthentication. Add your release SHA-1/SHA-256 in Firebase, download a new google-services.json, then reinstall the app.',
+        );
+      }
+      if (code == GoogleSignInExceptionCode.canceled ||
+          code == GoogleSignInExceptionCode.interrupted) {
+        final message = (description != null && description.isNotEmpty)
+            ? 'Google sign-in was canceled or interrupted. $description'
+            : 'Google sign-in was canceled or interrupted.';
         throw FirebaseAuthException(
           code: 'canceled',
-          message: 'Sign-in aborted by user.',
+          message: message,
+        );
+      }
+      if (code == GoogleSignInExceptionCode.clientConfigurationError ||
+          code == GoogleSignInExceptionCode.providerConfigurationError) {
+        final message = (description != null && description.isNotEmpty)
+            ? 'Google sign-in configuration issue. $description'
+            : 'Google sign-in configuration issue. Verify Firebase project setup, package/bundle IDs, and SHA fingerprints.';
+        throw FirebaseAuthException(
+          code: code.name,
+          message: message,
         );
       }
       throw FirebaseAuthException(
         code: code.name,
-        message: e.description ?? 'Google sign-in failed: ${code.name}',
+        message: (description != null && description.isNotEmpty)
+            ? 'Google sign-in failed. $description'
+            : 'Google sign-in failed: ${code.name}',
       );
     }
+  }
+
+  Future<UserCredential> _authenticateGoogleUser() async {
+    final GoogleSignInAccount account =
+        await GoogleSignIn.instance.authenticate(scopeHint: const ['email']);
+    final GoogleSignInAuthentication tokens = account.authentication;
+    final String? idToken = tokens.idToken;
+    if (idToken == null || idToken.isEmpty) {
+      throw const GoogleSignInException(
+        code: GoogleSignInExceptionCode.unknownError,
+        description: 'Missing ID token from Google sign-in.',
+      );
+    }
+    final credential = GoogleAuthProvider.credential(idToken: idToken);
+    return _auth.signInWithCredential(credential);
+  }
+
+  bool _isGoogleAccountReauthFailure(String? description) {
+    if (description == null || description.isEmpty) return false;
+    final normalized = description.toLowerCase();
+    return normalized.contains('account reauth failed') ||
+        normalized.contains('[16]');
   }
 
   Future<UserCredential> signInWithApple() async {
@@ -83,26 +125,39 @@ class AuthService {
 
     final rawNonce = _generateNonce();
     final nonce = _sha256ofString(rawNonce);
-    final credential = await SignInWithApple.getAppleIDCredential(
-      scopes: const [
-        AppleIDAuthorizationScopes.email,
-        AppleIDAuthorizationScopes.fullName
-      ],
-      nonce: nonce,
-    );
+    try {
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName
+        ],
+        nonce: nonce,
+      );
 
-    if (credential.identityToken == null) {
+      if (credential.identityToken == null) {
+        throw FirebaseAuthException(
+          code: 'missing-identity-token',
+          message: 'Apple did not return an identity token.',
+        );
+      }
+
+      final oauth = OAuthProvider('apple.com').credential(
+        idToken: credential.identityToken,
+        rawNonce: rawNonce,
+      );
+      return _auth.signInWithCredential(oauth);
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) {
+        throw FirebaseAuthException(
+          code: 'canceled',
+          message: 'Apple sign-in was canceled or interrupted.',
+        );
+      }
       throw FirebaseAuthException(
-        code: 'missing-identity-token',
-        message: 'Apple did not return an identity token.',
+        code: 'apple-${e.code.name}',
+        message: 'Apple sign-in failed. ${e.message}',
       );
     }
-
-    final oauth = OAuthProvider('apple.com').credential(
-      idToken: credential.identityToken,
-      rawNonce: rawNonce,
-    );
-    return _auth.signInWithCredential(oauth);
   }
 
   Future<void> signOut() async {

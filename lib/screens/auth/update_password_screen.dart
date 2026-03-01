@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart' show EmailAuthProvider;
 
 import '../../app_firebase.dart';
 
+import '../../services/i18n_service.dart';
+
 class UpdatePasswordScreen extends StatefulWidget {
   const UpdatePasswordScreen({super.key});
 
@@ -20,15 +22,15 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Update Password')),
+      appBar: AppBar(title: Text(I18nService.translate("Update Password"))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextField(
               controller: _current,
               obscureText: true,
-              decoration: const InputDecoration(
-                  hintText: 'Current Password',
+              decoration: InputDecoration(
+                  hintText: I18nService.translate("Current Password"),
                   filled: true,
                   fillColor: Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -38,8 +40,8 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
           TextField(
               controller: _new,
               obscureText: true,
-              decoration: const InputDecoration(
-                  hintText: 'New Password',
+              decoration: InputDecoration(
+                  hintText: I18nService.translate("New Password"),
                   filled: true,
                   fillColor: Color(0xFFF2F4F7),
                   border: OutlineInputBorder(
@@ -56,7 +58,7 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Save')),
+                  : Text(I18nService.translate("Save"))),
         ],
       ),
     );
@@ -69,17 +71,19 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     });
     try {
       final user = AppFirebase.auth.currentUser;
-      if (user == null || user.email == null) throw 'Not signed in';
+      if (user == null || user.email == null) {
+        throw I18nService.translate("Not signed in");
+      }
       final cred = EmailAuthProvider.credential(
           email: user.email!, password: _current.text);
       await user.reauthenticateWithCredential(cred);
       await user.updatePassword(_new.text);
       setState(() {
-        _msg = 'Password updated.';
+        _msg = I18nService.translate("Password updated.");
       });
     } catch (e) {
       setState(() {
-        _msg = 'Failed: $e';
+        _msg = '${I18nService.translate("Failed")}: $e';
       });
     } finally {
       if (mounted) {

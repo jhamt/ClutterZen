@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app_firebase.dart';
 import 'env.dart';
@@ -14,6 +15,7 @@ import 'services/analytics_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/crashlytics_service.dart';
 import 'services/env_validator.dart';
+import 'services/i18n_service.dart';
 import 'services/offline_queue_service.dart';
 import 'theme.dart';
 
@@ -33,6 +35,7 @@ Future<void> main() async {
 
   // Validate environment configuration
   EnvValidator.performRuntimeCheck();
+  await I18nService.initialize();
 
   try {
     final opts = DefaultFirebaseOptions.currentPlatformOrNull;
@@ -93,15 +96,32 @@ class MyApp extends StatelessWidget {
   final bool _enableAuthGate;
   final String _initialRoute;
 
+  Widget _buildMaterialApp(String route) {
+    return ValueListenableBuilder<Locale>(
+      valueListenable: I18nService.localeListenable,
+      builder: (context, locale, _) {
+        return MaterialApp(
+          key: ValueKey('${route}_${locale.toString()}'),
+          title: 'Clutter Zen',
+          theme: buildAppTheme(),
+          routes: AppRoutes.routes,
+          initialRoute: route,
+          locale: locale,
+          supportedLocales: I18nService.supportedLocales,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_enableAuthGate) {
-      return MaterialApp(
-        title: 'Clutter Zen',
-        theme: buildAppTheme(),
-        routes: AppRoutes.routes,
-        initialRoute: _initialRoute,
-      );
+      return _buildMaterialApp(_initialRoute);
     }
 
     return StreamBuilder<User?>(
@@ -122,13 +142,7 @@ class MyApp extends StatelessWidget {
                 ? '/home'
                 : '/onboarding';
 
-        return MaterialApp(
-          key: ValueKey(route),
-          title: 'Clutter Zen',
-          theme: buildAppTheme(),
-          routes: AppRoutes.routes,
-          initialRoute: route,
-        );
+        return _buildMaterialApp(route);
       },
     );
   }

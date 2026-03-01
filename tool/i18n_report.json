@@ -1,0 +1,375 @@
+{
+  "enKeyCount": 428,
+  "locales": {
+    "af": {
+      "keyCount": 428,
+      "equalToEnglishValues": 9,
+      "placeholderMismatches": 0
+    },
+    "am": {
+      "keyCount": 428,
+      "equalToEnglishValues": 5,
+      "placeholderMismatches": 0
+    },
+    "ar": {
+      "keyCount": 428,
+      "equalToEnglishValues": 4,
+      "placeholderMismatches": 0
+    },
+    "as": {
+      "keyCount": 428,
+      "equalToEnglishValues": 5,
+      "placeholderMismatches": 0
+    },
+    "az": {
+      "keyCount": 428,
+      "equalToEnglishValues": 9,
+      "placeholderMismatches": 0
+    },
+    "be": {
+      "keyCount": 428,
+      "equalToEnglishValues": 5,
+      "placeholderMismatches": 0
+    },
+    "bg": {
+      "keyCount": 428,
+      "equalToEnglishValues": 5,
+      "placeholderMismatches": 0
+    },
+    "bn": {
+      "keyCount": 428,
+      "equalToEnglishValues": 5,
+      "placeholderMismatches": 0
+    },
+    "bs": {
+      "keyCount": 428,
+      "equalToEnglishValues": 20,
+      "placeholderMismatches": 0
+    },
+    "ca": {
+      "keyCount": 428,
+      "equalToEnglishValues": 15,
+      "placeholderMismatches": 0
+    },
+    "cs": {
+      "keyCount": 428,
+      "equalToEnglishValues": 11,
+      "placeholderMismatches": 0
+    },
+    "da": {
+      "keyCount": 428,
+      "equalToEnglishValues": 17,
+      "placeholderMismatches": 0
+    },
+    "de": {
+      "keyCount": 428,
+      "equalToEnglishValues": 277,
+      "placeholderMismatches": 0
+    },
+    "el": {
+      "keyCount": 428,
+      "equalToEnglishValues": 275,
+      "placeholderMismatches": 0
+    },
+    "en": {
+      "keyCount": 428,
+      "equalToEnglishValues": 0,
+      "placeholderMismatches": 0
+    },
+    "es": {
+      "keyCount": 428,
+      "equalToEnglishValues": 268,
+      "placeholderMismatches": 0
+    },
+    "et": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "eu": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "fa": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "fi": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "fil": {
+      "keyCount": 428,
+      "equalToEnglishValues": 286,
+      "placeholderMismatches": 0
+    },
+    "fr": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "gl": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "gu": {
+      "keyCount": 428,
+      "equalToEnglishValues": 272,
+      "placeholderMismatches": 0
+    },
+    "he": {
+      "keyCount": 428,
+      "equalToEnglishValues": 274,
+      "placeholderMismatches": 0
+    },
+    "hi": {
+      "keyCount": 428,
+      "equalToEnglishValues": 268,
+      "placeholderMismatches": 0
+    },
+    "hr": {
+      "keyCount": 428,
+      "equalToEnglishValues": 274,
+      "placeholderMismatches": 0
+    },
+    "hu": {
+      "keyCount": 428,
+      "equalToEnglishValues": 273,
+      "placeholderMismatches": 0
+    },
+    "hy": {
+      "keyCount": 428,
+      "equalToEnglishValues": 274,
+      "placeholderMismatches": 0
+    },
+    "id": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "is": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "it": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "ja": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "ka": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "kk": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "km": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "kn": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "ko": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "ky": {
+      "keyCount": 428,
+      "equalToEnglishValues": 275,
+      "placeholderMismatches": 0
+    },
+    "lo": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "lt": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "lv": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "mk": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "ml": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "mn": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "mr": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "ms": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "my": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "nb": {
+      "keyCount": 428,
+      "equalToEnglishValues": 273,
+      "placeholderMismatches": 0
+    },
+    "ne": {
+      "keyCount": 428,
+      "equalToEnglishValues": 268,
+      "placeholderMismatches": 0
+    },
+    "nl": {
+      "keyCount": 428,
+      "equalToEnglishValues": 273,
+      "placeholderMismatches": 0
+    },
+    "or": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "pa": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "pl": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "ps": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "pt": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "ro": {
+      "keyCount": 428,
+      "equalToEnglishValues": 277,
+      "placeholderMismatches": 0
+    },
+    "ru": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    },
+    "si": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "sk": {
+      "keyCount": 428,
+      "equalToEnglishValues": 274,
+      "placeholderMismatches": 0
+    },
+    "sl": {
+      "keyCount": 428,
+      "equalToEnglishValues": 272,
+      "placeholderMismatches": 0
+    },
+    "sq": {
+      "keyCount": 428,
+      "equalToEnglishValues": 273,
+      "placeholderMismatches": 0
+    },
+    "sr": {
+      "keyCount": 428,
+      "equalToEnglishValues": 272,
+      "placeholderMismatches": 0
+    },
+    "sv": {
+      "keyCount": 428,
+      "equalToEnglishValues": 275,
+      "placeholderMismatches": 0
+    },
+    "sw": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "ta": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "te": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "th": {
+      "keyCount": 428,
+      "equalToEnglishValues": 268,
+      "placeholderMismatches": 0
+    },
+    "tr": {
+      "keyCount": 428,
+      "equalToEnglishValues": 268,
+      "placeholderMismatches": 0
+    },
+    "uk": {
+      "keyCount": 428,
+      "equalToEnglishValues": 273,
+      "placeholderMismatches": 0
+    },
+    "ur": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "uz": {
+      "keyCount": 428,
+      "equalToEnglishValues": 269,
+      "placeholderMismatches": 0
+    },
+    "vi": {
+      "keyCount": 428,
+      "equalToEnglishValues": 270,
+      "placeholderMismatches": 0
+    },
+    "zh": {
+      "keyCount": 428,
+      "equalToEnglishValues": 271,
+      "placeholderMismatches": 0
+    }
+  }
+}

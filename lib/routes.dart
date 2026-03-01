@@ -8,6 +8,7 @@ import 'screens/app/capture_screen.dart';
 import 'screens/app/processing_screen.dart';
 import 'screens/app/settings_screen.dart';
 import 'screens/app/notification_settings_screen.dart';
+import 'screens/app/language_settings_screen.dart';
 import 'screens/app/contact_us_screen.dart';
 import 'screens/app/pricing_screen.dart';
 import 'screens/payment/subscription_management_screen.dart';
@@ -36,6 +37,7 @@ class AppRoutes {
     '/processing': (_) => const ProcessingScreen(),
     '/settings': (_) => const SettingsScreen(),
     '/notification-settings': (_) => const NotificationSettingsScreen(),
+    '/language-settings': (_) => const LanguageSettingsScreen(),
     '/contact-us': (_) => const ContactUsScreen(),
     '/pricing': (_) => const PricingScreen(),
     '/subscription': (_) => const SubscriptionManagementScreen(),
@@ -54,6 +56,9 @@ class AppRoutes {
           image: args['image'] as ImageProvider,
           analysis: args['analysis'] as VisionAnalysis,
           organizedUrl: args['organizedUrl'] as String?,
+          analysisDocId: args['analysisDocId'] as String?,
+          organizedRegensUsed:
+              (args['organizedRegensUsed'] as num?)?.toInt() ?? 0,
         );
       }
       // Fallback - navigate back if no args
@@ -78,6 +83,7 @@ class AppRoutes {
     {'name': 'processing', 'route': '/processing'},
     {'name': 'settings', 'route': '/settings'},
     {'name': 'notification-settings', 'route': '/notification-settings'},
+    {'name': 'language-settings', 'route': '/language-settings'},
     {'name': 'contact-us', 'route': '/contact-us'},
     {'name': 'pricing', 'route': '/pricing'},
     {'name': 'terms-services', 'route': '/terms'},

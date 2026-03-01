@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../app_firebase.dart';
 import '../../models/vision_models.dart';
+import '../../services/i18n_service.dart';
+import 'categories_screen.dart';
+import 'capture_screen.dart';
 import '../results/results_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -17,26 +21,26 @@ class HomeScreen extends StatelessWidget {
       right: false,
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: const [
-          SizedBox(height: 8),
-          _TopBar(),
-          SizedBox(height: 12),
-          _GreetingRow(),
-          SizedBox(height: 8),
-          _CenterLogo(),
-          SizedBox(height: 8),
-          _TitleText(),
-          SizedBox(height: 8),
-          _PrimaryActions(),
+        children: [
+          const SizedBox(height: 8),
+          const _TopBar(),
+          const SizedBox(height: 12),
+          const _GreetingRow(),
+          const SizedBox(height: 8),
+          const _CenterLogo(),
+          const SizedBox(height: 8),
+          const _TitleText(),
+          const SizedBox(height: 8),
+          const _PrimaryActions(),
           SizedBox(height: 16),
-          _SectionHeader('Recent Categories'),
-          SizedBox(height: 8),
-          _RecentCategories(),
-          SizedBox(height: 16),
-          _SectionHeader('Recent Scans'),
-          SizedBox(height: 8),
-          _RecentScans(),
-          SizedBox(height: 16),
+          _SectionHeader(I18nService.translate('recent_categories')),
+          const SizedBox(height: 8),
+          const _RecentCategories(),
+          const SizedBox(height: 16),
+          _SectionHeader(I18nService.translate('recent_scans')),
+          const SizedBox(height: 8),
+          const _RecentScans(),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -153,13 +157,15 @@ class _DisplayName extends StatelessWidget {
             : emailPrefix.isNotEmpty
                 ? emailPrefix
                 : isSignedIn
-                    ? 'Friend'
-                    : 'Guest';
+                    ? I18nService.translate('friend')
+                    : I18nService.translate('guest');
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isSignedIn ? 'Welcome back' : 'Welcome',
+              isSignedIn
+                  ? I18nService.translate('welcome_back')
+                  : I18nService.translate('welcome_guest'),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -219,7 +225,7 @@ class _TitleText extends StatelessWidget {
       child: Column(
         children: [
           Text(
-            'Declutter Anything',
+            I18nService.translate('declutter_anything'),
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
@@ -227,7 +233,7 @@ class _TitleText extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Capture a room and get instant AI organization insights.',
+            I18nService.translate('capture_room_subtitle'),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: const Color(0xFF667085),
             ),
@@ -276,7 +282,14 @@ class _PrimaryActions extends StatelessWidget {
       children: [
         _ShadowButton(
           child: OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).pushNamed('/photo-upload'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const CaptureScreen(
+                  initialSource: ImageSource.camera,
+                  autoPickOnOpen: true,
+                ),
+              ),
+            ),
             style: OutlinedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: const Color(0xFF111111),
@@ -287,14 +300,21 @@ class _PrimaryActions extends StatelessWidget {
               elevation: 0,
             ),
             icon: const Icon(Icons.camera_alt_outlined),
-            label: const Text('Take Photo'),
+            label: Text(I18nService.translate('take_photo')),
           ),
         ),
         const SizedBox(height: 12),
         _ShadowButton(
           dark: true,
           child: ElevatedButton.icon(
-            onPressed: () => Navigator.of(context).pushNamed('/photo-upload'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const CaptureScreen(
+                  initialSource: ImageSource.gallery,
+                  autoPickOnOpen: true,
+                ),
+              ),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
@@ -304,7 +324,7 @@ class _PrimaryActions extends StatelessWidget {
               elevation: 0,
             ),
             icon: const Icon(Icons.photo_library_outlined),
-            label: const Text('Upload from Gallery'),
+            label: Text(I18nService.translate('upload_from_gallery')),
           ),
         ),
       ],
@@ -423,6 +443,39 @@ class _EmptyDataMessage extends StatelessWidget {
                   .textTheme
                   .bodySmall
                   ?.copyWith(color: const Color(0xFF667085)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LiveUpdateWarning extends StatelessWidget {
+  const _LiveUpdateWarning({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6ED),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFCCB9C)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 18, color: Color(0xFFB54708)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF7A2E0B),
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
           ),
         ],
@@ -564,9 +617,8 @@ class _RecentCategories extends StatelessWidget {
   Widget build(BuildContext context) {
     final uid = AppFirebase.auth.currentUser?.uid;
     if (uid == null) {
-      return const _CategoriesSkeleton(
-        message:
-            'Analyze your first image to populate recent categories.',
+      return _EmptyDataMessage(
+        message: I18nService.translate('scan_images_to_show_here'),
       );
     }
     final query = AppFirebase.firestore
@@ -577,10 +629,13 @@ class _RecentCategories extends StatelessWidget {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: query.snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) {
-          return const _CategoriesSkeleton(message: 'Loading recent categories...');
+        if (!snap.hasData && !snap.hasError) {
+          return _CategoriesSkeleton(
+            message: I18nService.translate('loading_recent_categories'),
+          );
         }
-        final docs = snap.data!.docs;
+        final docs = snap.data?.docs ?? const [];
+        final hasError = snap.hasError;
         // Derive categories list from analyses' categories fields
         final Map<String, String> catToImage = {};
         for (final d in docs) {
@@ -596,69 +651,112 @@ class _RecentCategories extends StatelessWidget {
         }
         final items = catToImage.entries.take(10).toList();
         if (items.isEmpty) {
-          return const _CategoriesSkeleton(
-            message:
-                'Analyze your first image to populate recent categories.',
+          return Column(
+            children: [
+              if (hasError)
+                _LiveUpdateWarning(
+                  message:
+                      I18nService.translate('recent_categories_load_error'),
+                ),
+              if (hasError) const SizedBox(height: 8),
+              _EmptyDataMessage(
+                message: I18nService.translate('scan_images_to_show_here'),
+              ),
+            ],
           );
         }
-        return SizedBox(
-          height: 170,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 14),
-            itemBuilder: (_, i) {
-              final label = items[i].key;
-              final img = items[i].value;
-              return Container(
-                width: 180,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE4E7EC)),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withAlpha(18),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4)),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(16),
-                            topRight: Radius.circular(16)),
-                        child: img.isNotEmpty
-                            ? Image.network(img, fit: BoxFit.cover)
-                            : Container(
-                                color: const Color(0xFFF2F4F7),
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.image_outlined,
-                                    color: Color(0xFF98A2B3),
-                                  ),
-                                ),
-                              ),
+        return Column(
+          children: [
+            if (hasError)
+              _LiveUpdateWarning(
+                message: I18nService.translate('recent_categories_load_error'),
+              ),
+            if (hasError) const SizedBox(height: 8),
+            SizedBox(
+              height: 170,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 14),
+                itemBuilder: (_, i) {
+                  final label = items[i].key;
+                  final displayLabel = _formatCategoryTitle(label);
+                  final img = items[i].value;
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CategoryDetailScreen(
+                            title: displayLabel,
+                            categoryKey: label,
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      width: 180,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE4E7EC)),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withAlpha(18),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4)),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(16),
+                                  topRight: Radius.circular(16)),
+                              child: img.isNotEmpty
+                                  ? Image.network(img, fit: BoxFit.cover)
+                                  : Container(
+                                      width: double.infinity,
+                                      color: const Color(0xFFF2F4F7),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.image_outlined,
+                                          color: Color(0xFF98A2B3),
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(displayLabel,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        ],
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(label,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
+  }
+
+  String _formatCategoryTitle(String raw) {
+    final clean = raw.replaceAll('_', ' ').trim();
+    if (clean.isEmpty) return 'Category';
+    final words = clean.split(RegExp(r'\s+'));
+    return words.where((word) => word.isNotEmpty).map((word) {
+      if (word.length == 1) return word.toUpperCase();
+      return '${word[0].toUpperCase()}${word.substring(1)}';
+    }).join(' ');
   }
 }
 
@@ -695,8 +793,8 @@ class _RecentScansState extends State<_RecentScans> {
   Widget build(BuildContext context) {
     final uid = AppFirebase.auth.currentUser?.uid;
     if (uid == null) {
-      return const _ScansSkeleton(
-        message: 'Analyze your first image to populate recent scans.',
+      return _EmptyDataMessage(
+        message: I18nService.translate('scan_images_to_show_here'),
       );
     }
     final query = AppFirebase.firestore
@@ -708,11 +806,13 @@ class _RecentScansState extends State<_RecentScans> {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: query.snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) {
-          return const _ScansSkeleton(message: 'Loading recent scans...');
+        if (!snap.hasData && !snap.hasError) {
+          return _ScansSkeleton(
+            message: I18nService.translate('loading_recent_scans'),
+          );
         }
-
-        final docs = snap.data!.docs;
+        final docs = snap.data?.docs ?? const [];
+        final hasError = snap.hasError;
         final seenIds = docs.map((d) => d.id).toSet();
         final combinedDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[
           ...docs
@@ -720,6 +820,15 @@ class _RecentScansState extends State<_RecentScans> {
         for (final doc in _extraDocs) {
           if (seenIds.add(doc.id)) {
             combinedDocs.add(doc);
+          }
+        }
+        final dedupedDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+        final seenImageKeys = <String>{};
+        for (final doc in combinedDocs) {
+          final imageUrl = (doc.data()['imageUrl'] as String?)?.trim() ?? '';
+          final key = imageUrl.isEmpty ? doc.id : imageUrl;
+          if (seenImageKeys.add(key)) {
+            dedupedDocs.add(doc);
           }
         }
         final categories = combinedDocs
@@ -731,7 +840,7 @@ class _RecentScansState extends State<_RecentScans> {
           ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
         final queryText = _searchController.text.trim().toLowerCase();
-        final filteredDocs = combinedDocs.where((d) {
+        final filteredDocs = dedupedDocs.where((d) {
           final data = d.data();
           final title = (data['title'] as String?)?.toLowerCase() ?? '';
           final category =
@@ -754,13 +863,19 @@ class _RecentScansState extends State<_RecentScans> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (hasError) ...[
+              _LiveUpdateWarning(
+                message: I18nService.translate('recent_scans_load_error'),
+              ),
+              const SizedBox(height: 10),
+            ],
             TextField(
               controller: _searchController,
               onChanged: (_) => setState(() {
                 _resetPagination();
               }),
               decoration: InputDecoration(
-                hintText: 'Search scans...',
+                hintText: I18nService.translate('search_scans'),
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isEmpty
                     ? null
@@ -810,7 +925,7 @@ class _RecentScansState extends State<_RecentScans> {
                   icon: const Icon(Icons.tune),
                   label: Text(
                     _selectedCategory == null
-                        ? 'Filter'
+                        ? I18nService.translate('filter')
                         : 'Filter ($_selectedCategory)',
                   ),
                 ),
@@ -832,12 +947,13 @@ class _RecentScansState extends State<_RecentScans> {
             const SizedBox(height: 16),
             if (filteredDocs.isEmpty)
               combinedDocs.isEmpty
-                  ? const _ScansSkeleton(
-                      message: 'Analyze your first image to populate recent scans.',
+                  ? _EmptyDataMessage(
+                      message:
+                          I18nService.translate('scan_images_to_show_here'),
                     )
                   : Center(
                       child: Text(
-                        'No scans found. Try a different search or filter.',
+                        I18nService.translate('no_scans_found'),
                         style: Theme.of(context)
                             .textTheme
                             .bodyMedium
@@ -896,7 +1012,7 @@ class _RecentScansState extends State<_RecentScans> {
       return Align(
         alignment: Alignment.centerLeft,
         child: Text(
-          'All scans loaded',
+          I18nService.translate('all_scans_loaded'),
           style: Theme.of(context)
               .textTheme
               .bodySmall
@@ -914,7 +1030,7 @@ class _RecentScansState extends State<_RecentScans> {
                 height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Text('Load more'),
+            : Text(I18nService.translate('load_more')),
       ),
     );
   }
@@ -947,7 +1063,11 @@ class _RecentScansState extends State<_RecentScans> {
       if (!mounted) return;
       setState(() => _loadingMore = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load more scans: $e')),
+        SnackBar(
+          content: Text(
+            '${I18nService.translate('failed_load_more_scans')} $e',
+          ),
+        ),
       );
     }
   }
@@ -958,7 +1078,7 @@ class _RecentScansState extends State<_RecentScans> {
   ) {
     final data = doc.data();
     final imageUrl = (data['imageUrl'] as String?) ?? '';
-    final title = (data['title'] as String?) ?? 'Scan';
+    final title = (data['title'] as String?) ?? I18nService.translate("Scan");
     final score = (data['clutterScore'] as num?)?.toStringAsFixed(1) ?? '-';
 
     return Card(
@@ -977,7 +1097,10 @@ class _RecentScansState extends State<_RecentScans> {
                 ),
         ),
         title: Text(title),
-        subtitle: Text('Clutter score: $score/10'),
+        subtitle: Text(
+          I18nService.translate("Clutter score: {score}/10",
+              params: {'score': score}),
+        ),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
@@ -997,9 +1120,10 @@ class _RecentScansState extends State<_RecentScans> {
   ) {
     final data = doc.data();
     final imageUrl = (data['imageUrl'] as String?) ?? '';
-    final title = (data['title'] as String?) ?? 'Scan';
+    final title = (data['title'] as String?) ?? I18nService.translate("Scan");
     final score = (data['clutterScore'] as num?)?.toStringAsFixed(1) ?? '-';
-    final category = (data['primaryCategory'] as String?) ?? 'General';
+    final category = (data['primaryCategory'] as String?) ??
+        I18nService.translate("General");
 
     return GestureDetector(
       onTap: () => _openScan(context, doc),
@@ -1043,7 +1167,9 @@ class _RecentScansState extends State<_RecentScans> {
                     children: [
                       const Icon(Icons.insights_outlined, size: 16),
                       const SizedBox(width: 4),
-                      Text('Score $score/10',
+                      Text(
+                          I18nService.translate("Score {score}/10",
+                              params: {'score': score}),
                           style: Theme.of(context).textTheme.bodySmall),
                     ],
                   ),
@@ -1063,6 +1189,8 @@ class _RecentScansState extends State<_RecentScans> {
     final data = doc.data();
     final url = (data['imageUrl'] as String?) ?? '';
     final organized = data['organizedImageUrl'] as String?;
+    final organizedRegensUsed =
+        (data['organizedRegensUsed'] as num?)?.toInt() ?? 0;
     final labels =
         (data['labels'] as List?)?.cast<String>() ?? const <String>[];
     final objectsRaw = (data['objects'] as List?) ?? const <dynamic>[];
@@ -1071,7 +1199,7 @@ class _RecentScansState extends State<_RecentScans> {
           o is Map<String, dynamic> ? o['box'] as Map<String, dynamic>? : null;
       return DetectedObject(
         name: (o is Map<String, dynamic> ? o['name'] as String? : null) ??
-            'object',
+            I18nService.translate("object"),
         confidence:
             (o is Map<String, dynamic> ? (o['confidence'] as num?) : null)
                     ?.toDouble() ??
@@ -1092,7 +1220,9 @@ class _RecentScansState extends State<_RecentScans> {
         builder: (_) => ResultsScreen(
             image: NetworkImage(url),
             analysis: analysis,
-            organizedUrl: organized),
+            organizedUrl: organized,
+            analysisDocId: doc.id,
+            organizedRegensUsed: organizedRegensUsed),
       ),
     );
   }
@@ -1108,7 +1238,7 @@ class _RecentScansState extends State<_RecentScans> {
             children: [
               ListTile(
                 leading: const Icon(Icons.clear),
-                title: const Text('All categories'),
+                title: Text(I18nService.translate('all_categories')),
                 onTap: () {
                   setState(() {
                     _selectedCategory = null;
@@ -1119,8 +1249,8 @@ class _RecentScansState extends State<_RecentScans> {
               ),
               const Divider(),
               if (categories.isEmpty)
-                const ListTile(
-                  title: Text('No categories available'),
+                ListTile(
+                  title: Text(I18nService.translate('no_categories_available')),
                 )
               else
                 for (final category in categories)

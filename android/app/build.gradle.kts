@@ -41,7 +41,7 @@ android {
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionName = "${flutter.versionName}R"
     }
 
     signingConfigs {
@@ -64,13 +64,14 @@ android {
                 "proguard-rules.pro",
             )
 
-            // Uses release signing when key.properties is present.
-            // Falls back to debug signing for local verification builds.
-            signingConfig = if (hasReleaseSigning) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            // Fail fast so release artifacts are never signed with debug keys.
+            if (!hasReleaseSigning) {
+                throw GradleException(
+                    "Missing android/key.properties for release signing. " +
+                        "Create a release keystore and configure key.properties.",
+                )
             }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

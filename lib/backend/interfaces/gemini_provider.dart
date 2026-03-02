@@ -15,6 +15,22 @@ abstract class IGeminiProvider {
     required List<String> detectedObjects,
     Uint8List? imageBytes,
     double? clutterScore,
+    List<String>? labels,
+    List<Map<String, dynamic>>? objectDetections,
+    List<Map<String, dynamic>>? zoneHotspots,
+    String? imageUrl,
+    String? localeCode,
+    String detailLevel = 'balanced',
+  });
+
+  /// Generates a concise scan title from image/context.
+  Future<String> generateScanTitle({
+    required List<String> detectedObjects,
+    List<String>? labels,
+    List<Map<String, dynamic>>? objectDetections,
+    String? imageUrl,
+    Uint8List? imageBytes,
+    String? localeCode,
   });
 
   /// Generates an image using Gemini's text-to-image model as a fallback.

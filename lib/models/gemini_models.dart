@@ -5,12 +5,14 @@ class GeminiRecommendation {
   final List<ProductRecommendation> products;
   final List<DiyStep> diyPlan;
   final String? summary;
+  final GeminiRecommendationMeta? meta;
 
   const GeminiRecommendation({
     required this.services,
     required this.products,
     required this.diyPlan,
     this.summary,
+    this.meta,
   });
 
   factory GeminiRecommendation.empty() => const GeminiRecommendation(
@@ -34,6 +36,10 @@ class GeminiRecommendation {
             .map(DiyStep.fromJson)
             .toList(),
         summary: json['summary'] as String?,
+        meta: json['meta'] is Map<String, dynamic>
+            ? GeminiRecommendationMeta.fromJson(
+                json['meta'] as Map<String, dynamic>)
+            : null,
       );
 
   Map<String, dynamic> toJson() => {
@@ -41,6 +47,32 @@ class GeminiRecommendation {
         'products': products.map((p) => p.toJson()).toList(),
         'diyPlan': diyPlan.map((d) => d.toJson()).toList(),
         'summary': summary,
+        'meta': meta?.toJson(),
+      };
+}
+
+class GeminiRecommendationMeta {
+  final String? source;
+  final bool? qualityPassed;
+  final String? model;
+
+  const GeminiRecommendationMeta({
+    this.source,
+    this.qualityPassed,
+    this.model,
+  });
+
+  factory GeminiRecommendationMeta.fromJson(Map<String, dynamic> json) =>
+      GeminiRecommendationMeta(
+        source: json['source'] as String?,
+        qualityPassed: json['qualityPassed'] as bool?,
+        model: json['model'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'source': source,
+        'qualityPassed': qualityPassed,
+        'model': model,
       };
 }
 

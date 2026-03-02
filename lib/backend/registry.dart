@@ -242,12 +242,25 @@ class _FunctionsGeminiAdapter implements IGeminiProvider {
     required List<String> detectedObjects,
     Uint8List? imageBytes,
     double? clutterScore,
+    List<String>? labels,
+    List<Map<String, dynamic>>? objectDetections,
+    List<Map<String, dynamic>>? zoneHotspots,
+    String? imageUrl,
+    String? localeCode,
+    String detailLevel = 'balanced',
   }) async {
     try {
       return await _functionsSvc.getGeminiRecommendationsViaFunction(
         spaceDescription: spaceDescription,
         detectedObjects: detectedObjects,
         clutterScore: clutterScore,
+        labels: labels,
+        objectDetections: objectDetections,
+        zoneHotspots: zoneHotspots,
+        imageUrl: imageUrl,
+        imageBytes: imageBytes,
+        localeCode: localeCode,
+        detailLevel: detailLevel,
       );
     } catch (_) {
       final direct = _directSvc;
@@ -257,6 +270,53 @@ class _FunctionsGeminiAdapter implements IGeminiProvider {
         detectedObjects: detectedObjects,
         imageBytes: imageBytes,
         clutterScore: clutterScore,
+        labels: labels,
+        objectDetections: objectDetections,
+        zoneHotspots: zoneHotspots,
+        imageUrl: imageUrl,
+        localeCode: localeCode,
+        detailLevel: detailLevel,
+      );
+    }
+  }
+
+  @override
+  Future<String> generateScanTitle({
+    required List<String> detectedObjects,
+    List<String>? labels,
+    List<Map<String, dynamic>>? objectDetections,
+    String? imageUrl,
+    Uint8List? imageBytes,
+    String? localeCode,
+  }) async {
+    try {
+      return await _functionsSvc.getGeminiScanTitleViaFunction(
+        detectedObjects: detectedObjects,
+        labels: labels,
+        objectDetections: objectDetections,
+        imageUrl: imageUrl,
+        imageBytes: imageBytes,
+        localeCode: localeCode,
+      );
+    } catch (_) {
+      final direct = _directSvc;
+      if (direct != null) {
+        try {
+          return await direct.generateScanTitle(
+            detectedObjects: detectedObjects,
+            labels: labels,
+            objectDetections: objectDetections,
+            imageUrl: imageUrl,
+            imageBytes: imageBytes,
+            localeCode: localeCode,
+          );
+        } catch (_) {
+          // Fall through to deterministic fallback title.
+        }
+      }
+      return _buildFallbackScanTitle(
+        detectedObjects: detectedObjects,
+        labels: labels,
       );
     }
   }
@@ -278,5 +338,47 @@ class _FunctionsGeminiAdapter implements IGeminiProvider {
     final direct = _directSvc;
     if (direct == null) return null;
     return direct.generateImageFallback(prompt);
+  }
+
+  String _buildFallbackScanTitle({
+    required List<String> detectedObjects,
+    List<String>? labels,
+  }) {
+    final objects =
+        detectedObjects.map((value) => value.toLowerCase()).toList();
+    final safeLabels = (labels ?? const <String>[])
+        .map((value) => value.toLowerCase())
+        .toList();
+
+    bool hasAny(List<String> tokens) {
+      return objects.any((item) => tokens.any(item.contains)) ||
+          safeLabels.any((item) => tokens.any(item.contains));
+    }
+
+    if (hasAny(['desk', 'workspace', 'laptop', 'monitor'])) {
+      return 'Desk Reset Plan';
+    }
+    if (hasAny(['kitchen', 'plate', 'utensil', 'pan', 'counter'])) {
+      return 'Kitchen Reset Plan';
+    }
+    if (hasAny(['closet', 'wardrobe', 'clothing', 'hanger', 'shoe'])) {
+      return 'Closet Reset Plan';
+    }
+    if (hasAny(['garage', 'tool', 'storage'])) {
+      return 'Garage Reset Plan';
+    }
+    if (hasAny(['bathroom', 'sink', 'toilet', 'shower'])) {
+      return 'Bathroom Reset Plan';
+    }
+
+    final primary = objects.isNotEmpty
+        ? objects.first.replaceAll(RegExp(r'[_-]+'), ' ')
+        : (safeLabels.isNotEmpty ? safeLabels.first : 'space');
+    final normalized = primary
+        .split(' ')
+        .where((word) => word.isNotEmpty)
+        .map((word) => '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
+    return normalized.isEmpty ? 'Space Reset Plan' : '$normalized Reset Plan';
   }
 }

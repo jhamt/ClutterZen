@@ -34,6 +34,12 @@ class GeminiService {
     required List<String> detectedObjects,
     Uint8List? imageBytes,
     double? clutterScore,
+    List<String>? labels,
+    List<Map<String, dynamic>>? objectDetections,
+    List<Map<String, dynamic>>? zoneHotspots,
+    String? imageUrl,
+    String? localeCode,
+    String detailLevel = 'balanced',
   }) async {
     if (detectedObjects.isEmpty && spaceDescription == null) {
       return GeminiRecommendation.empty();
@@ -43,6 +49,12 @@ class GeminiService {
       spaceDescription: spaceDescription,
       detectedObjects: detectedObjects,
       clutterScore: clutterScore,
+      labels: labels,
+      objectDetections: objectDetections,
+      zoneHotspots: zoneHotspots,
+      localeCode: localeCode,
+      detailLevel: detailLevel,
+      imageUrl: imageUrl,
     );
 
     for (final modelName in _textModelHierarchy) {
@@ -88,6 +100,62 @@ class GeminiService {
       diyPlan: [],
       summary: 'Unable to generate recommendations from any AI model.',
     );
+  }
+
+  /// Generates a concise scan title from image/context.
+  Future<String> generateScanTitle({
+    required List<String> detectedObjects,
+    List<String>? labels,
+    List<Map<String, dynamic>>? objectDetections,
+    Uint8List? imageBytes,
+    String? imageUrl,
+    String? localeCode,
+  }) async {
+    final fallback = _buildFallbackScanTitle(
+      detectedObjects: detectedObjects,
+      labels: labels,
+    );
+    final prompt = _buildScanTitlePrompt(
+      detectedObjects: detectedObjects,
+      labels: labels,
+      objectDetectionsCount: objectDetections?.length ?? 0,
+      imageUrl: imageUrl,
+      localeCode: localeCode,
+    );
+
+    for (final modelName in _textModelHierarchy) {
+      try {
+        final model = GenerativeModel(
+          model: modelName,
+          apiKey: _apiKey,
+          generationConfig: GenerationConfig(
+            temperature: 0.2,
+            maxOutputTokens: 120,
+            responseMimeType: 'application/json',
+          ),
+        );
+
+        final content = <Content>[];
+        if (imageBytes != null) {
+          content.add(Content.multi([
+            DataPart('image/jpeg', imageBytes),
+            TextPart(prompt),
+          ]));
+        } else {
+          content.add(Content.text(prompt));
+        }
+
+        final response = await model.generateContent(content);
+        final parsedTitle = _extractScanTitle(response.text);
+        if (parsedTitle != null) {
+          return parsedTitle;
+        }
+      } catch (e) {
+        debugPrint('Gemini scan title model failed ($modelName): $e');
+      }
+    }
+
+    return fallback;
   }
 
   /// Generates an image using Gemini image-capable models as a fallback.
@@ -159,8 +227,7 @@ class GeminiService {
       final parts = content?['parts'] as List<dynamic>? ?? const [];
       for (final rawPart in parts) {
         final part = rawPart as Map<String, dynamic>;
-        final dynamic inlineDataRaw =
-            part['inlineData'] ?? part['inline_data'];
+        final dynamic inlineDataRaw = part['inlineData'] ?? part['inline_data'];
         if (inlineDataRaw is! Map<String, dynamic>) continue;
 
         final mimeType =
@@ -184,12 +251,150 @@ class GeminiService {
     return '${body.substring(0, 220)}...';
   }
 
+  String _buildScanTitlePrompt({
+    required List<String> detectedObjects,
+    List<String>? labels,
+    int objectDetectionsCount = 0,
+    String? imageUrl,
+    String? localeCode,
+  }) {
+    final objects = detectedObjects.take(15).join(', ');
+    final labelLine = (labels ?? const <String>[]).take(12).join(', ');
+    return '''
+You generate concise scan titles for a home organization app.
+Use visible evidence from image first, then detected objects and labels.
+
+CONTEXT:
+- Objects: ${objects.isEmpty ? 'none' : objects}
+- Labels: ${labelLine.isEmpty ? 'none' : labelLine}
+- Object detections count: $objectDetectionsCount
+- Locale: ${localeCode ?? 'en'} (fallback English)
+- Image URL: ${imageUrl ?? 'not provided'}
+
+Return strict JSON only:
+{
+  "title": ""
+}
+
+Rules:
+- 2 to 6 words.
+- Specific, not generic.
+- Avoid words like scan, photo, image, room, clutter, plan.
+''';
+  }
+
+  String? _extractScanTitle(String? text) {
+    if (text == null || text.trim().isEmpty) return null;
+    try {
+      var clean = text.trim();
+      if (clean.startsWith('```json')) clean = clean.substring(7);
+      if (clean.startsWith('```')) clean = clean.substring(3);
+      if (clean.endsWith('```')) clean = clean.substring(0, clean.length - 3);
+      clean = clean.trim();
+
+      final decoded = jsonDecode(clean);
+      if (decoded is Map<String, dynamic>) {
+        return _sanitizeScanTitleCandidate(decoded['title'] as String?);
+      }
+      if (decoded is String) {
+        return _sanitizeScanTitleCandidate(decoded);
+      }
+      return null;
+    } catch (_) {
+      return _sanitizeScanTitleCandidate(text);
+    }
+  }
+
+  String? _sanitizeScanTitleCandidate(String? rawTitle) {
+    if (rawTitle == null) return null;
+    final title = rawTitle
+        .replaceAll(RegExp(r'[\r\n\t]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (title.length < 4 || title.length > 72) return null;
+    final words = title.split(' ').where((word) => word.isNotEmpty).toList();
+    if (words.length < 2 || words.length > 7) return null;
+
+    const genericTokens = <String>{
+      'scan',
+      'photo',
+      'image',
+      'room',
+      'space',
+      'clutter',
+      'organization',
+      'organizing',
+      'plan',
+    };
+    final hasSpecificWord = words.any((word) {
+      final normalized =
+          word.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      return normalized.isNotEmpty && !genericTokens.contains(normalized);
+    });
+    if (!hasSpecificWord) return null;
+
+    return title;
+  }
+
+  String _buildFallbackScanTitle({
+    required List<String> detectedObjects,
+    List<String>? labels,
+  }) {
+    final objects =
+        detectedObjects.map((value) => value.toLowerCase()).toList();
+    final safeLabels = (labels ?? const <String>[])
+        .map((value) => value.toLowerCase())
+        .toList();
+    bool hasAny(List<String> tokens) {
+      return objects.any((item) => tokens.any(item.contains)) ||
+          safeLabels.any((item) => tokens.any(item.contains));
+    }
+
+    if (hasAny(['desk', 'workspace', 'laptop', 'monitor'])) {
+      return 'Desk Reset Plan';
+    }
+    if (hasAny(['kitchen', 'plate', 'utensil', 'pan', 'counter'])) {
+      return 'Kitchen Reset Plan';
+    }
+    if (hasAny(['closet', 'wardrobe', 'clothing', 'hanger', 'shoe'])) {
+      return 'Closet Reset Plan';
+    }
+    if (hasAny(['garage', 'tool', 'storage'])) {
+      return 'Garage Reset Plan';
+    }
+    if (hasAny(['bathroom', 'sink', 'toilet', 'shower'])) {
+      return 'Bathroom Reset Plan';
+    }
+
+    final primary = objects.isNotEmpty
+        ? objects.first.replaceAll(RegExp(r'[_-]+'), ' ')
+        : (safeLabels.isNotEmpty ? safeLabels.first : 'space');
+    final normalizedPrimary = primary
+        .split(' ')
+        .where((word) => word.isNotEmpty)
+        .map((word) => '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
+    return _sanitizeScanTitleCandidate('$normalizedPrimary Reset Plan') ??
+        'Space Reset Plan';
+  }
+
   String _buildPrompt({
     String? spaceDescription,
     required List<String> detectedObjects,
     double? clutterScore,
+    List<String>? labels,
+    List<Map<String, dynamic>>? objectDetections,
+    List<Map<String, dynamic>>? zoneHotspots,
+    String? localeCode,
+    String detailLevel = 'balanced',
+    String? imageUrl,
   }) {
     final objectsList = detectedObjects.join(', ');
+    final labelsList = (labels ?? const <String>[]).join(', ');
+    final zoneList = (zoneHotspots ?? const <Map<String, dynamic>>[])
+        .map((zone) => zone['name'])
+        .whereType<String>()
+        .join(', ');
 
     // Smart room type detection
     final roomType = _detectRoomType(detectedObjects);
@@ -205,7 +410,13 @@ SPACE ANALYSIS:
 ${spaceDescription != null ? '- Description: $spaceDescription' : ''}
 - Room Type: $roomType
 - Detected Objects: $objectsList
+- Labels: ${labelsList.isEmpty ? 'none' : labelsList}
+- Zones: ${zoneList.isEmpty ? 'none detected' : zoneList}
 - Clutter Level: ${severity.level} (${clutterScore?.toStringAsFixed(0) ?? '50'}/100)
+- Detail profile: $detailLevel
+- Locale: ${localeCode ?? 'en'}
+- Image URL: ${imageUrl ?? 'not provided'}
+- Object detections provided: ${(objectDetections ?? const <Map<String, dynamic>>[]).length}
 
 ${severity.context}
 
@@ -243,6 +454,7 @@ Provide recommendations in the following JSON format:
 GUIDELINES:
 ${roomContext.guidelines}
 ${severity.recommendations}
+- Provide a professional, highly specific plan (8-12 detailed steps depending on clutter).
 ''';
   }
 
@@ -512,6 +724,10 @@ ${severity.recommendations}
         products: products,
         diyPlan: diyPlan,
         summary: json['summary'] as String?,
+        meta: json['meta'] is Map<String, dynamic>
+            ? GeminiRecommendationMeta.fromJson(
+                json['meta'] as Map<String, dynamic>)
+            : null,
       );
     } catch (e) {
       // Return empty on parse failure

@@ -41,6 +41,12 @@ class Env {
   static String get googleServerClientId => _get('GOOGLE_SERVER_CLIENT_ID',
       const String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID'));
 
+  // --- Sign in with Apple (Android web flow config) ---
+  static String get appleServiceId => _get(
+      'APPLE_SERVICE_ID', const String.fromEnvironment('APPLE_SERVICE_ID'));
+  static String get appleRedirectUri => _get(
+      'APPLE_REDIRECT_URI', const String.fromEnvironment('APPLE_REDIRECT_URI'));
+
   // --- Stripe ---
   static String get stripePublishableKey => _get('STRIPE_PUBLISHABLE_KEY',
       const String.fromEnvironment('STRIPE_PUBLISHABLE_KEY'));

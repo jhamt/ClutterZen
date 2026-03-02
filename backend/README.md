@@ -29,7 +29,23 @@ Set the API keys as Firebase Functions environment config:
 ```bash
 firebase functions:config:set vision.key="YOUR_VISION_API_KEY"
 firebase functions:config:set replicate.token="YOUR_REPLICATE_API_TOKEN"
+firebase functions:config:set google.places.key="YOUR_GOOGLE_PLACES_API_KEY"
 ```
+
+Optional quota guard (recommended to stay in free tier averages):
+
+```bash
+export MAPS_DAILY_NEARBY_CAP=24
+export MAPS_DAILY_TEXT_CAP=8
+export MAPS_DAILY_DETAILS_CAP=28
+export MAPS_DAILY_GEOCODE_CAP=300
+export MAPS_DAILY_PREMIUM_CAP=30
+export MAPS_ENABLE_PLACE_PHOTOS=false
+```
+
+These are read from Functions environment variables and can be tuned.
+`MAPS_DAILY_PREMIUM_CAP` protects free-tier usage by capping combined nearby/text/details calls per day.
+`MAPS_ENABLE_PLACE_PHOTOS=false` avoids accidental Places Photo SKU costs by default.
 
 You can verify with `firebase functions:config:get`.
 
@@ -72,6 +88,13 @@ Available routes:
     - `data.predictionId`
     - `data.sourceOutputUrl` (original provider URL)
     - `data.storagePath` (Firebase Storage object path)
+
+- `POST /professionals/nearby`
+  - body: `{ "latitude": 37.77, "longitude": -122.42, "detectedObjects": ["desk"] }`
+  - or: `{ "locationQuery": "San Francisco, CA", "labels": ["office"] }`
+  - success response:
+    - `data.services` (normalized nearby professionals)
+    - `data.meta` (source, resolved location, radius, quality diagnostics)
 
 ## Integrating with the Flutter app
 

@@ -1,83 +1,156 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../backend/registry.dart';
 import '../../../app_firebase.dart';
+import '../../../backend/registry.dart';
 import '../../../models/gemini_models.dart';
+import '../../../models/recommendation_context.dart';
 import '../../../models/vision_models.dart';
-
 import '../../../services/i18n_service.dart';
+import '../../../services/local_diy_plan_builder.dart';
+import '../../../services/recommendation_context_builder.dart';
 
 class DIYTab extends StatefulWidget {
-  const DIYTab({super.key, required this.analysis, this.embedded = false});
+  const DIYTab({
+    super.key,
+    required this.analysis,
+    this.embedded = false,
+    this.recommendationContext,
+  });
 
   final VisionAnalysis analysis;
   final bool embedded;
+  final RecommendationContext? recommendationContext;
 
   @override
   State<DIYTab> createState() => _DIYTabState();
 }
 
-class _DIYTabState extends State<DIYTab> {
-  late final List<String> _fallbackInstructions;
+class _DIYTabState extends State<DIYTab> with AutomaticKeepAliveClientMixin {
+  static final Map<String, GeminiRecommendation> _cache =
+      <String, GeminiRecommendation>{};
+  static final Map<String, Future<GeminiRecommendation>> _pending =
+      <String, Future<GeminiRecommendation>>{};
+
   GeminiRecommendation? _recommendation;
   bool _isLoading = true;
-  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _fallbackInstructions = _generateSmartInstructions(widget.analysis.objects);
+    final cached = _cache[_cacheKey];
+    if (cached != null) {
+      _recommendation = cached;
+      _isLoading = false;
+      return;
+    }
     _fetchGeminiRecommendations();
   }
 
-  Future<void> _fetchGeminiRecommendations() async {
-    try {
-      final rec = await Registry.gemini.getRecommendations(
-        detectedObjects: widget.analysis.objects.map((o) => o.name).toList(),
+  RecommendationContext get _context =>
+      widget.recommendationContext ??
+      RecommendationContextBuilder.build(
+        analysis: widget.analysis,
+        clutterScore: (widget.analysis.objects.length * 10.0).clamp(0.0, 100.0),
+        localeCode: I18nService.currentLocale.languageCode,
       );
-      if (mounted) {
-        setState(() {
-          _recommendation = rec;
-          _isLoading = false;
-        });
-      }
+
+  String get _cacheKey {
+    final context = _context;
+    final labels = context.labels.map((entry) => entry.toLowerCase()).toList()
+      ..sort();
+    final objects = context.objectDetections
+        .map((entry) => entry.name.toLowerCase())
+        .toList()
+      ..sort();
+    final prefixObjects = objects.take(12).join(',');
+    final prefixLabels = labels.take(10).join(',');
+    final clutter = context.clutterScore.round();
+    return 'diy|$clutter|${context.localeCode}|$prefixObjects|$prefixLabels';
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+
+  GeminiRecommendation _buildFallbackRecommendation() {
+    return LocalDiyPlanBuilder.build(context: _context);
+  }
+
+  Future<void> _fetchGeminiRecommendations() async {
+    final key = _cacheKey;
+    final cached = _cache[key];
+    if (cached != null) {
+      if (!mounted) return;
+      setState(() {
+        _recommendation = cached;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final future = _pending.putIfAbsent(key, () async {
+        final context = _context;
+        final rec = await Registry.gemini.getRecommendations(
+          spaceDescription:
+              'Context-rich organization planning for scanned space',
+          detectedObjects: context.objectDetections
+              .map((entry) => entry.name)
+              .toList(growable: false),
+          labels: context.labels,
+          objectDetections: context.objectDetectionsJson,
+          zoneHotspots: context.zoneHotspotsJson,
+          clutterScore: context.clutterScore,
+          imageUrl: context.imageUrl,
+          imageBytes: context.imageBytes,
+          localeCode: context.localeCode,
+          detailLevel: context.detailLevel,
+        );
+        return rec.diyPlan.isNotEmpty ? rec : _buildFallbackRecommendation();
+      });
+      final result = await future;
+      _cache[key] = result;
+
+      if (!mounted) return;
+      setState(() {
+        _recommendation = result;
+        _isLoading = false;
+      });
     } catch (e) {
       debugPrint('Gemini failed: $e');
-      if (mounted) {
-        setState(() {
-          _errorMessage = e.toString();
-          _isLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _recommendation = _buildFallbackRecommendation();
+        _isLoading = false;
+      });
+    } finally {
+      _pending.remove(key);
     }
   }
 
   String _buildPlanText() {
+    final recommendation = _recommendation;
+    if (recommendation == null) return '';
+
     final buffer = StringBuffer();
     buffer.writeln(I18nService.translate("ClutterZen Organization Plan"));
     buffer.writeln('=' * 30);
     buffer.writeln();
 
-    if (_recommendation != null && _recommendation!.diyPlan.isNotEmpty) {
-      if (_recommendation!.summary != null) {
-        buffer.writeln(_recommendation!.summary);
-        buffer.writeln();
-      }
-      for (final step in _recommendation!.diyPlan) {
+    if (recommendation.summary != null && recommendation.summary!.isNotEmpty) {
+      buffer.writeln(recommendation.summary);
+      buffer.writeln();
+    }
+
+    for (final step in recommendation.diyPlan) {
+      buffer.writeln(
+          '${I18nService.translate("Step")} ${step.stepNumber}: ${step.title}');
+      buffer.writeln(step.description);
+      if (step.tips.isNotEmpty) {
         buffer.writeln(
-            '${I18nService.translate("Step")} ${step.stepNumber}: ${step.title}');
-        buffer.writeln(step.description);
-        if (step.tips.isNotEmpty) {
-          buffer.writeln(
-              '${I18nService.translate("Tips:")} ${step.tips.join(', ')}');
-        }
-        buffer.writeln();
+            '${I18nService.translate("Tips:")} ${step.tips.join(', ')}');
       }
-    } else {
-      for (int i = 0; i < _fallbackInstructions.length; i++) {
-        buffer.writeln('${i + 1}. ${_fallbackInstructions[i]}');
-      }
+      buffer.writeln();
     }
 
     buffer.writeln(I18nService.translate("Generated by ClutterZen App"));
@@ -86,7 +159,9 @@ class _DIYTabState extends State<DIYTab> {
 
   Future<void> _savePlan(BuildContext context) async {
     try {
-      // Save to Firestore under user's saved plans
+      final recommendation = _recommendation;
+      if (recommendation == null || recommendation.diyPlan.isEmpty) return;
+
       final user = AppFirebase.auth.currentUser;
       if (user == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -103,7 +178,8 @@ class _DIYTabState extends State<DIYTab> {
         'title': I18nService.translate("Organization Plan"),
         'content': _buildPlanText(),
         'createdAt': DateTime.now().toIso8601String(),
-        'objects': widget.analysis.objects.map((o) => o.name).toList(),
+        'objects':
+            widget.analysis.objects.map((object) => object.name).toList(),
       });
 
       if (context.mounted) {
@@ -125,10 +201,11 @@ class _DIYTabState extends State<DIYTab> {
   }
 
   Future<void> _sharePlan() async {
-    final planText = _buildPlanText();
+    final recommendation = _recommendation;
+    if (recommendation == null || recommendation.diyPlan.isEmpty) return;
     await SharePlus.instance.share(
       ShareParams(
-        text: planText,
+        text: _buildPlanText(),
         subject: I18nService.translate("My ClutterZen Organization Plan"),
       ),
     );
@@ -136,21 +213,22 @@ class _DIYTabState extends State<DIYTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(I18nService.translate("Generating AI Organization Plan...")),
           ],
         ),
       );
     }
 
-    final hasGemini =
-        _recommendation != null && _recommendation!.diyPlan.isNotEmpty;
+    final recommendation = _recommendation;
+    final hasPlan = recommendation != null && recommendation.diyPlan.isNotEmpty;
 
     return ListView(
       shrinkWrap: widget.embedded,
@@ -163,50 +241,64 @@ class _DIYTabState extends State<DIYTab> {
           padding: const EdgeInsets.all(12),
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withAlpha(15),
-              borderRadius: BorderRadius.circular(12)),
-          child: Row(children: [
-            const Icon(Icons.psychology, size: 32),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    hasGemini
-                        ? I18nService.translate("AI-Powered Organization Plan")
-                        : I18nService.translate(
-                            "Your Custom Organization Plan"),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    hasGemini
-                        ? (_recommendation!.summary ??
-                            I18nService.translate(
-                                "Optimized steps for your space."))
-                        : I18nService.translate(
-                            "Follow these steps to declutter your space."),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).textTheme.bodySmall?.color,
+            color: Theme.of(context).colorScheme.primary.withAlpha(15),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.psychology, size: 32),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      I18nService.translate("Organization Plan"),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                  ),
-                ],
+                    Text(
+                      recommendation?.summary ??
+                          I18nService.translate(
+                              "Follow these steps to declutter your space."),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            )
-          ]),
+            ],
+          ),
         ),
-        if (hasGemini)
-          ..._recommendation!.diyPlan.map((step) => Card(
-                margin: const EdgeInsets.only(bottom: 10),
+        if (hasPlan)
+          ...recommendation.diyPlan.map(
+            (step) => Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              clipBehavior: Clip.antiAlias,
+              child: Theme(
+                data: Theme.of(context)
+                    .copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
+                  shape: const RoundedRectangleBorder(side: BorderSide.none),
+                  collapsedShape:
+                      const RoundedRectangleBorder(side: BorderSide.none),
                   leading: CircleAvatar(
                     radius: 14,
-                    child: Text('${step.stepNumber}',
-                        style: const TextStyle(fontSize: 12)),
+                    backgroundColor: const Color(0xFF111111),
+                    child: Text(
+                      '${step.stepNumber}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                  title: Text(step.title,
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  title: Text(
+                    step.title,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   children: [
                     Padding(
                       padding: const EdgeInsets.all(16),
@@ -216,216 +308,73 @@ class _DIYTabState extends State<DIYTab> {
                           Text(step.description),
                           if (step.tips.isNotEmpty) ...[
                             const SizedBox(height: 8),
-                            Text(I18nService.translate("Pro Tips:"),
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 12)),
-                            ...step.tips.map((tip) => Padding(
-                                  padding:
-                                      const EdgeInsets.only(top: 4, left: 8),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(I18nService.translate("- "),
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold)),
-                                      Expanded(
-                                          child: Text(tip,
-                                              style: const TextStyle(
-                                                  fontSize: 12))),
-                                    ],
-                                  ),
-                                )),
+                            Text(
+                              I18nService.translate("Pro Tips:"),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                            ...step.tips.map(
+                              (tip) => Padding(
+                                padding: const EdgeInsets.only(top: 4, left: 8),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      I18nService.translate("- "),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        tip,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ],
                       ),
                     ),
                   ],
                 ),
-              ))
-        else
-          for (final instruction in _fallbackInstructions)
-            Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                leading: const Icon(Icons.check_box_outline_blank),
-                title: Text(instruction),
               ),
             ),
-        const SizedBox(height: 16),
-        Row(children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _savePlan(context),
-              icon: const Icon(Icons.save),
-              label: Text(I18nService.translate("Save Plan")),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _sharePlan(),
-              icon: const Icon(Icons.share),
-              label: Text(I18nService.translate("Share")),
-            ),
           )
-        ]),
-        if (_errorMessage != null && !hasGemini)
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Text(
-              I18nService.translate(
-                  "Note: AI service unavailable, showing basic plan."),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600], fontSize: 11),
+        else
+          Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: Text(I18nService.translate(
+                  "Unable to generate a plan. Please retry this scan.")),
             ),
           ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: hasPlan ? () => _savePlan(context) : null,
+                icon: const Icon(Icons.save),
+                label: Text(I18nService.translate("Save Plan")),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: hasPlan ? _sharePlan : null,
+                icon: const Icon(Icons.share),
+                label: Text(I18nService.translate("Share")),
+              ),
+            ),
+          ],
+        ),
       ],
     );
-  }
-
-  String _categorizeObject(String objectName) {
-    // This is a simplified version for instruction generation.
-    final name = objectName.toLowerCase();
-    if ([
-      'shirt',
-      'pants',
-      'dress',
-      'jacket',
-      'coat',
-      'shoe',
-      'clothing',
-      'jeans',
-      'sweater',
-      'sock',
-      'tie',
-      'belt',
-      'hat',
-      'scarf'
-    ].any((item) => name.contains(item))) {
-      return 'clothing';
-    }
-    if ([
-      'book',
-      'magazine',
-      'newspaper',
-      'paper',
-      'document',
-      'notebook',
-      'folder',
-      'binder',
-      'journal'
-    ].any((item) => name.contains(item))) {
-      return 'books_paper';
-    }
-    if ([
-      'computer',
-      'laptop',
-      'phone',
-      'tablet',
-      'cable',
-      'charger',
-      'headphones',
-      'keyboard',
-      'mouse',
-      'monitor',
-      'television',
-      'remote'
-    ].any((item) => name.contains(item))) {
-      return 'electronics';
-    }
-    if ([
-      'plate',
-      'bowl',
-      'cup',
-      'mug',
-      'glass',
-      'fork',
-      'spoon',
-      'knife',
-      'pot',
-      'pan',
-      'bottle',
-      'food'
-    ].any((item) => name.contains(item))) {
-      return 'kitchen';
-    }
-    return 'miscellaneous';
-  }
-
-  List<String> _generateSmartInstructions(List<DetectedObject> objects) {
-    final instructions = <String>[];
-    final double clutterScore = (objects.length / 5).clamp(1.0, 10.0);
-
-    if (clutterScore > 7) {
-      instructions.add(I18nService.translate(
-          "High clutter detected. Let's tackle this step by step!"));
-    } else if (clutterScore > 4) {
-      instructions.add(I18nService.translate(
-          "Moderate clutter. A quick organization session will help!"));
-    } else {
-      instructions.add(
-          I18nService.translate("Minimal clutter. Just a few tweaks needed!"));
-    }
-
-    final categoryCounts = <String, int>{};
-    for (var obj in objects) {
-      final category = _categorizeObject(obj.name);
-      categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
-    }
-
-    final sortedCategories = categoryCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    int stepNumber = 1;
-    for (var entry in sortedCategories) {
-      String category = entry.key;
-      int count = entry.value;
-
-      switch (category) {
-        case 'clothing':
-          instructions.add(I18nService.translate(
-              "{step}. CLOTHING ({count} items): Sort by type, fold or hang, and consider donating items not worn recently.",
-              params: {
-                'step': '${stepNumber++}',
-                'count': '$count',
-              }));
-          break;
-        case 'books_paper':
-          instructions.add(I18nService.translate(
-              "{step}. BOOKS & PAPERS ({count} items): Stack books neatly, file loose papers, and digitize important documents.",
-              params: {
-                'step': '${stepNumber++}',
-                'count': '$count',
-              }));
-          break;
-        case 'electronics':
-          instructions.add(I18nService.translate(
-              "{step}. ELECTRONICS ({count} items): Create a charging station, bundle cables with ties, and label chargers.",
-              params: {
-                'step': '${stepNumber++}',
-                'count': '$count',
-              }));
-          break;
-        case 'kitchen':
-          instructions.add(I18nService.translate(
-              "{step}. KITCHEN ITEMS ({count} items): Group similar items, stack plates and bowls, and use drawer dividers for utensils.",
-              params: {
-                'step': '${stepNumber++}',
-                'count': '$count',
-              }));
-          break;
-        default:
-          if (count > 2) {
-            instructions.add(I18nService.translate(
-                "{step}. MISCELLANEOUS ({count} items): Find a designated home for each item and group similar things together.",
-                params: {
-                  'step': '${stepNumber++}',
-                  'count': '$count',
-                }));
-          }
-      }
-    }
-    return instructions;
   }
 }

@@ -3,12 +3,15 @@ import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../app_firebase.dart';
 import '../../backend/registry.dart';
+import '../../models/recommendation_context.dart';
 import '../../models/vision_models.dart';
 import '../../services/analysis_repository.dart';
+import '../../services/recommendation_context_builder.dart';
 import '../../widgets/detection_overlay.dart';
 import '../../widgets/organization_zones_overlay.dart';
 import 'components/before_after_slider.dart';
@@ -28,6 +31,8 @@ class ResultsScreen extends StatefulWidget {
     this.organizedUrl,
     this.analysisDocId,
     this.organizedRegensUsed = 0,
+    this.sourceImageUrl,
+    this.sourceImageBytes,
   });
 
   final ImageProvider image;
@@ -35,6 +40,8 @@ class ResultsScreen extends StatefulWidget {
   final String? organizedUrl;
   final String? analysisDocId;
   final int organizedRegensUsed;
+  final String? sourceImageUrl;
+  final Uint8List? sourceImageBytes;
 
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
@@ -45,11 +52,15 @@ class _ResultsScreenState extends State<ResultsScreen>
   static const int _maxManualRegens = 5;
 
   late final TabController _tab;
+  late final ScrollController _scrollController;
+  final Map<int, Widget> _tabViews = <int, Widget>{};
   _OverlayMode _overlayMode = _OverlayMode.detections;
+  bool _hasScrolledBody = false;
 
   String? _replicateAfterUrl;
   String? _analysisDocId;
   int _organizedRegensUsed = 0;
+  late final RecommendationContext _recommendationContext;
 
   bool _isGeneratingAfter = false;
   bool _afterImageLoadFailed = false;
@@ -64,11 +75,15 @@ class _ResultsScreenState extends State<ResultsScreen>
   @override
   void initState() {
     super.initState();
+    _recommendationContext = _buildRecommendationContext();
+    _scrollController = ScrollController()..addListener(_onBodyScroll);
     _tab = TabController(length: 3, vsync: this);
     _tab.addListener(() {
       if (!mounted) return;
+      _ensureTabBuilt(_tab.index);
       setState(() {});
     });
+    _ensureTabBuilt(0);
     _replicateAfterUrl = null;
     _analysisDocId = widget.analysisDocId;
     _organizedRegensUsed = widget.organizedRegensUsed < 0
@@ -79,6 +94,9 @@ class _ResultsScreenState extends State<ResultsScreen>
 
   @override
   void dispose() {
+    _scrollController
+      ..removeListener(_onBodyScroll)
+      ..dispose();
     _tab.dispose();
     super.dispose();
   }
@@ -91,7 +109,15 @@ class _ResultsScreenState extends State<ResultsScreen>
     );
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor:
+            _hasScrolledBody ? const Color(0xFFEAF4F7) : Colors.white,
+        foregroundColor: Colors.black,
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         title: Text(I18nService.translate("Results")),
         actions: [
           IconButton(
@@ -101,6 +127,7 @@ class _ResultsScreenState extends State<ResultsScreen>
         ],
       ),
       body: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         children: [
           _buildOverlayModeSelector(context),
@@ -462,15 +489,82 @@ class _ResultsScreenState extends State<ResultsScreen>
   }
 
   Widget _buildActiveTabContent() {
-    switch (_tab.index) {
-      case 1:
-        return ShopTab(analysis: widget.analysis, embedded: true);
-      case 2:
-        return ProfessionalTab(analysis: widget.analysis, embedded: true);
-      case 0:
-      default:
-        return DIYTab(analysis: widget.analysis, embedded: true);
+    _ensureTabBuilt(0);
+    _ensureTabBuilt(1);
+    _ensureTabBuilt(2);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: List<Widget>.generate(3, (index) {
+        final tabView = _tabViews[index];
+        if (tabView == null) {
+          return const SizedBox.shrink();
+        }
+        return Offstage(
+          offstage: _tab.index != index,
+          child: TickerMode(
+            enabled: _tab.index == index,
+            child: tabView,
+          ),
+        );
+      }),
+    );
+  }
+
+  void _onBodyScroll() {
+    final hasScrolled =
+        _scrollController.hasClients && _scrollController.offset > 1.0;
+    if (hasScrolled == _hasScrolledBody || !mounted) {
+      return;
     }
+    setState(() {
+      _hasScrolledBody = hasScrolled;
+    });
+  }
+
+  void _ensureTabBuilt(int index) {
+    _tabViews.putIfAbsent(index, () {
+      switch (index) {
+        case 0:
+          return DIYTab(
+            analysis: widget.analysis,
+            embedded: true,
+            recommendationContext: _recommendationContext,
+          );
+        case 1:
+          return ShopTab(
+            analysis: widget.analysis,
+            embedded: true,
+          );
+        case 2:
+        default:
+          return ProfessionalTab(
+            analysis: widget.analysis,
+            embedded: true,
+            recommendationContext: _recommendationContext,
+          );
+      }
+    });
+  }
+
+  RecommendationContext _buildRecommendationContext() {
+    final clutter10 = _computeClutterScore(
+      widget.analysis.objects.length,
+      widget.analysis.labels,
+    );
+    final clutter100 = (clutter10 * 10).clamp(0.0, 100.0);
+    final networkImageUrl = widget.image is NetworkImage
+        ? (widget.image as NetworkImage).url
+        : null;
+    final resolvedImageUrl = widget.sourceImageUrl ?? networkImageUrl;
+
+    return RecommendationContextBuilder.build(
+      analysis: widget.analysis,
+      clutterScore: clutter100,
+      localeCode: I18nService.currentLocale.languageCode,
+      detailLevel: 'balanced',
+      imageUrl: resolvedImageUrl,
+      imageBytes: widget.sourceImageBytes,
+    );
   }
 
   Future<void> _generateNewOrganizedImage() async {

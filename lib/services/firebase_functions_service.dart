@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../models/vision_models.dart';
 import '../models/gemini_models.dart';
+import '../models/professional_service.dart';
 import '../app_firebase.dart';
 import '../env.dart';
 import 'functions_endpoint.dart';
@@ -378,11 +379,215 @@ class FirebaseFunctionsService {
     String? spaceDescription,
     required List<String> detectedObjects,
     double? clutterScore,
+    List<String>? labels,
+    List<Map<String, dynamic>>? objectDetections,
+    List<Map<String, dynamic>>? zoneHotspots,
+    String? imageUrl,
+    Uint8List? imageBytes,
+    String? localeCode,
+    String detailLevel = 'balanced',
   }) async {
+    final uri = FunctionsEndpoint.buildUri(
+      baseUrl: _baseUrl,
+      path: '/gemini/recommend',
+    );
+    const maxAttempts = 2;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final idToken = await _getIdToken(forceRefresh: attempt > 1);
+        final headers = <String, String>{
+          'Content-Type': 'application/json',
+        };
+        if (idToken != null) {
+          headers['Authorization'] = 'Bearer $idToken';
+        }
+
+        final response = await _client
+            .post(
+              uri,
+              headers: headers,
+              body: jsonEncode({
+                'spaceDescription': spaceDescription,
+                'detectedObjects': detectedObjects,
+                'clutterScore': clutterScore,
+                'labels': labels,
+                'objectDetections': objectDetections,
+                'zoneHotspots': zoneHotspots,
+                'imageUrl': imageUrl,
+                'imageBase64':
+                    imageBytes != null ? base64Encode(imageBytes) : null,
+                'localeCode': localeCode,
+                'detailLevel': detailLevel,
+              }),
+            )
+            .timeout(const Duration(seconds: 45));
+
+        if (response.statusCode == 401 && attempt < maxAttempts) {
+          continue;
+        }
+
+        if (response.statusCode != 200) {
+          throw FunctionsEndpoint.buildRequestException(
+            response: response,
+            uri: uri,
+            fallbackMessage: 'Recommendations request failed',
+          );
+        }
+
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        final data = decoded['data'];
+        if (data is! Map<String, dynamic>) {
+          throw FunctionsRequestException(
+            message: 'Recommendations response is missing data.',
+            statusCode: response.statusCode,
+            uri: uri,
+          );
+        }
+        return GeminiRecommendation.fromJson(data);
+      } catch (e) {
+        if (attempt < maxAttempts &&
+            e is FunctionsRequestException &&
+            e.statusCode == 401) {
+          continue;
+        }
+        if (e is FunctionsConfigException || e is FunctionsRequestException) {
+          rethrow;
+        }
+        throw FunctionsRequestException(
+          message: 'Recommendations failed. Please try again.',
+          uri: uri,
+        );
+      }
+    }
+
+    throw FunctionsRequestException(
+      message: 'Recommendations failed. Please try again.',
+      uri: uri,
+    );
+  }
+
+  /// Call Gemini scan-title endpoint via Firebase Cloud Function.
+  Future<String> getGeminiScanTitleViaFunction({
+    required List<String> detectedObjects,
+    List<String>? labels,
+    List<Map<String, dynamic>>? objectDetections,
+    String? imageUrl,
+    Uint8List? imageBytes,
+    String? localeCode,
+  }) async {
+    final uri = FunctionsEndpoint.buildUri(
+      baseUrl: _baseUrl,
+      path: '/gemini/scan-title',
+    );
+    const maxAttempts = 2;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final idToken = await _getIdToken(forceRefresh: attempt > 1);
+        final headers = <String, String>{
+          'Content-Type': 'application/json',
+        };
+        if (idToken != null) {
+          headers['Authorization'] = 'Bearer $idToken';
+        }
+
+        final response = await _client
+            .post(
+              uri,
+              headers: headers,
+              body: jsonEncode({
+                'detectedObjects': detectedObjects,
+                'labels': labels,
+                'objectDetections': objectDetections,
+                'imageUrl': imageUrl,
+                'imageBase64':
+                    imageBytes != null ? base64Encode(imageBytes) : null,
+                'localeCode': localeCode,
+              }),
+            )
+            .timeout(const Duration(seconds: 25));
+
+        if (response.statusCode == 401 && attempt < maxAttempts) {
+          continue;
+        }
+
+        if (response.statusCode != 200) {
+          throw FunctionsEndpoint.buildRequestException(
+            response: response,
+            uri: uri,
+            fallbackMessage: 'Scan title request failed',
+          );
+        }
+
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        final data = decoded['data'];
+        if (data is! Map<String, dynamic>) {
+          throw FunctionsRequestException(
+            message: 'Scan title response is missing data.',
+            statusCode: response.statusCode,
+            uri: uri,
+          );
+        }
+        final title = (data['title'] as String?)?.trim();
+        if (title == null || title.isEmpty) {
+          throw FunctionsRequestException(
+            message: 'Scan title response did not contain a valid title.',
+            statusCode: response.statusCode,
+            uri: uri,
+          );
+        }
+        return title;
+      } catch (e) {
+        if (attempt < maxAttempts &&
+            e is FunctionsRequestException &&
+            e.statusCode == 401) {
+          continue;
+        }
+        if (e is FunctionsConfigException || e is FunctionsRequestException) {
+          rethrow;
+        }
+        throw FunctionsRequestException(
+          message: 'Scan title generation failed. Please try again.',
+          uri: uri,
+        );
+      }
+    }
+
+    throw FunctionsRequestException(
+      message: 'Scan title generation failed. Please try again.',
+      uri: uri,
+    );
+  }
+
+  /// Call nearby professionals endpoint via Firebase Cloud Function.
+  Future<NearbyProfessionalsResponse> getNearbyProfessionalsViaFunction({
+    required List<String> detectedObjects,
+    List<String>? labels,
+    double? clutterScore,
+    double? latitude,
+    double? longitude,
+    String? locationQuery,
+    int radiusMeters = 15000,
+    String? localeCode,
+    int limit = 8,
+  }) async {
+    final hasCoords = latitude != null && longitude != null;
+    final hasLocationQuery = (locationQuery ?? '').trim().isNotEmpty;
+    if (!hasCoords && !hasLocationQuery) {
+      throw ArgumentError(
+        'Either latitude/longitude or locationQuery must be provided',
+      );
+    }
+    if ((latitude == null) != (longitude == null)) {
+      throw ArgumentError('latitude and longitude must be provided together');
+    }
+
+    final safeRadius = radiusMeters.clamp(1000, 50000);
+    final safeLimit = limit.clamp(1, 12);
+
     try {
       final uri = FunctionsEndpoint.buildUri(
         baseUrl: _baseUrl,
-        path: '/gemini/recommend',
+        path: '/professionals/nearby',
       );
       final idToken = await _getIdToken();
       final headers = <String, String>{
@@ -397,37 +602,57 @@ class FirebaseFunctionsService {
             uri,
             headers: headers,
             body: jsonEncode({
-              'spaceDescription': spaceDescription,
               'detectedObjects': detectedObjects,
+              'labels': labels ?? const <String>[],
               'clutterScore': clutterScore,
+              'latitude': latitude,
+              'longitude': longitude,
+              'locationQuery': hasLocationQuery ? locationQuery!.trim() : null,
+              'radiusMeters': safeRadius,
+              'localeCode': localeCode,
+              'limit': safeLimit,
             }),
           )
-          .timeout(const Duration(seconds: 45));
+          .timeout(const Duration(seconds: 25));
 
       if (response.statusCode != 200) {
         throw FunctionsEndpoint.buildRequestException(
           response: response,
           uri: uri,
-          fallbackMessage: 'Recommendations request failed',
+          fallbackMessage: 'Nearby professionals request failed',
         );
       }
 
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      final data = decoded['data'];
-      if (data is! Map<String, dynamic>) {
+      final dataRaw = decoded['data'];
+      if (dataRaw is! Map<String, dynamic>) {
         throw FunctionsRequestException(
-          message: 'Recommendations response is missing data.',
+          message: 'Nearby professionals response is missing data.',
           statusCode: response.statusCode,
           uri: uri,
         );
       }
-      return GeminiRecommendation.fromJson(data);
+      final servicesRaw = dataRaw['services'] as List<dynamic>? ?? const [];
+      final services = servicesRaw
+          .whereType<Map<String, dynamic>>()
+          .map(ProfessionalService.fromJson)
+          .toList(growable: false);
+      final metaRaw = dataRaw['meta'];
+      final meta = metaRaw is Map<String, dynamic>
+          ? NearbyProfessionalsMeta.fromJson(metaRaw)
+          : null;
+      return NearbyProfessionalsResponse(
+        services: services,
+        meta: meta,
+      );
     } catch (e) {
-      if (e is FunctionsConfigException || e is FunctionsRequestException) {
+      if (e is FunctionsConfigException ||
+          e is FunctionsRequestException ||
+          e is ArgumentError) {
         rethrow;
       }
       throw FunctionsRequestException(
-        message: 'Recommendations failed. Please try again.',
+        message: 'Nearby professionals lookup failed. Please try again.',
       );
     }
   }

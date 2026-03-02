@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../backend/registry.dart';
 import '../../../models/product_recommendation.dart';
 import '../../../models/vision_models.dart';
+import '../../../services/i18n_service.dart';
+import '../../../services/product_link_service.dart';
 import '../../../services/product_recommendation_service.dart';
 
-import '../../../services/i18n_service.dart';
-
 class ShopTab extends StatefulWidget {
-  const ShopTab({super.key, required this.analysis, this.embedded = false});
+  const ShopTab({
+    super.key,
+    required this.analysis,
+    this.embedded = false,
+  });
+
   final VisionAnalysis analysis;
   final bool embedded;
 
@@ -17,7 +21,12 @@ class ShopTab extends StatefulWidget {
   State<ShopTab> createState() => _ShopTabState();
 }
 
-class _ShopTabState extends State<ShopTab> {
+class _ShopTabState extends State<ShopTab> with AutomaticKeepAliveClientMixin {
+  static final Map<String, List<ProductRecommendation>> _cache =
+      <String, List<ProductRecommendation>>{};
+  static final Map<String, Future<List<ProductRecommendation>>> _pending =
+      <String, Future<List<ProductRecommendation>>>{};
+
   late Future<List<ProductRecommendation>> _recommendationsFuture;
   String _searchQuery = '';
   String? _selectedCategory;
@@ -25,62 +34,54 @@ class _ShopTabState extends State<ShopTab> {
   @override
   void initState() {
     super.initState();
-    _recommendationsFuture = _loadAllRecommendations();
+    final cached = _cache[_cacheKey];
+    _recommendationsFuture = cached != null
+        ? Future<List<ProductRecommendation>>.value(cached)
+        : _loadAllRecommendations();
   }
+
+  String get _cacheKey {
+    final objects = widget.analysis.objects
+        .map((entry) => entry.name.toLowerCase().trim())
+        .where((entry) => entry.isNotEmpty)
+        .toList()
+      ..sort();
+    final labels = widget.analysis.labels
+        .map((entry) => entry.toLowerCase().trim())
+        .where((entry) => entry.isNotEmpty)
+        .toList()
+      ..sort();
+    return 'shop|${objects.take(16).join(",")}|${labels.take(10).join(",")}';
+  }
+
+  @override
+  bool get wantKeepAlive => true;
 
   Future<List<ProductRecommendation>> _loadAllRecommendations() async {
-    // Load both Firestore products and Gemini AI recommendations in parallel
-    final results = await Future.wait([
-      ProductRecommendationService.generateRecommendations(widget.analysis),
-      _loadGeminiRecommendations(),
-    ]);
+    final key = _cacheKey;
+    final cached = _cache[key];
+    if (cached != null) return cached;
 
-    // Merge Firestore products with Gemini suggestions
-    final firestoreProducts = results[0];
-    final geminiProducts = results[1];
+    final inFlight = _pending[key];
+    if (inFlight != null) return inFlight;
 
-    // Deduplicate by name (prefer Firestore if duplicate)
-    final Map<String, ProductRecommendation> productMap = {};
-    for (final product in [...firestoreProducts, ...geminiProducts]) {
-      productMap.putIfAbsent(product.name.toLowerCase(), () => product);
-    }
-
-    return productMap.values.toList();
-  }
-
-  Future<List<ProductRecommendation>> _loadGeminiRecommendations() async {
+    // Curated-only recommendations for consistent trust and link accuracy.
+    final future = ProductRecommendationService.generateRecommendations(
+      widget.analysis,
+    );
+    _pending[key] = future;
     try {
-      // Calculate approximate clutter score from object count
-      final clutterScore =
-          (widget.analysis.objects.length * 10.0).clamp(0.0, 100.0);
-
-      final geminiRecs = await Registry.gemini.getRecommendations(
-        detectedObjects: widget.analysis.objects.map((o) => o.name).toList(),
-        spaceDescription: 'Cluttered space with items needing organization',
-        clutterScore: clutterScore,
-      );
-
-      // Convert Gemini ProductRecommendations to app's ProductRecommendation format
-      return geminiRecs.products
-          .map((geminiProduct) => ProductRecommendation(
-                name: geminiProduct.name,
-                price: geminiProduct.price ?? 0.0,
-                merchant: I18nService.translate("AI Recommended"),
-                category: geminiProduct.category,
-                affiliateLink: geminiProduct.affiliateUrl ?? '',
-                imageUrl: geminiProduct.imageUrl ?? '',
-                rating: 4.5, // Default rating for AI recommendations
-                description: geminiProduct.description,
-              ))
-          .toList();
-    } catch (e) {
-      // Silently fail if Gemini is unavailable
-      return [];
+      final result = await future;
+      _cache[key] = result;
+      return result;
+    } finally {
+      _pending.remove(key);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return FutureBuilder<List<ProductRecommendation>>(
       future: _recommendationsFuture,
       builder: (context, snapshot) {
@@ -95,7 +96,8 @@ class _ShopTabState extends State<ShopTab> {
                 const Icon(Icons.error_outline, size: 48, color: Colors.grey),
                 const SizedBox(height: 16),
                 Text(
-                    '${I18nService.translate("Error loading products")}: ${snapshot.error}'),
+                  '${I18nService.translate("Error loading products")}: ${snapshot.error}',
+                ),
               ],
             ),
           );
@@ -109,8 +111,11 @@ class _ShopTabState extends State<ShopTab> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.shopping_bag_outlined,
-                    size: 64, color: Colors.grey),
+                const Icon(
+                  Icons.shopping_bag_outlined,
+                  size: 64,
+                  color: Colors.grey,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   _searchQuery.isNotEmpty || _selectedCategory != null
@@ -144,7 +149,7 @@ class _ShopTabState extends State<ShopTab> {
             crossAxisCount: 2,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 0.7,
+            childAspectRatio: 0.58,
           ),
           itemCount: filtered.length,
           itemBuilder: (context, i) {
@@ -155,9 +160,8 @@ class _ShopTabState extends State<ShopTab> {
 
         return Column(
           children: [
-            // Search and filter bar
             Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(8),
               child: Column(
                 children: [
                   TextField(
@@ -231,16 +235,17 @@ class _ShopTabState extends State<ShopTab> {
 
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
-      filtered = filtered.where((p) {
-        return p.name.toLowerCase().contains(query) ||
-            p.description.toLowerCase().contains(query) ||
-            p.category.toLowerCase().contains(query);
+      filtered = filtered.where((product) {
+        return product.name.toLowerCase().contains(query) ||
+            product.description.toLowerCase().contains(query) ||
+            product.category.toLowerCase().contains(query);
       }).toList();
     }
 
     if (_selectedCategory != null) {
-      filtered =
-          filtered.where((p) => p.category == _selectedCategory).toList();
+      filtered = filtered
+          .where((product) => product.category == _selectedCategory)
+          .toList();
     }
 
     return filtered;
@@ -249,6 +254,7 @@ class _ShopTabState extends State<ShopTab> {
 
 class _ProductCard extends StatelessWidget {
   const _ProductCard({required this.product});
+
   final ProductRecommendation product;
 
   @override
@@ -260,130 +266,119 @@ class _ProductCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Product image
-          Expanded(
-            flex: 3,
+          AspectRatio(
+            aspectRatio: 4 / 3,
             child: Container(
               width: double.infinity,
               color: Colors.grey[200],
-              child: product.imageUrl.isNotEmpty
-                  ? Image.network(
-                      product.imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(
-                          child: Icon(Icons.shopping_bag,
-                              size: 48, color: Colors.grey),
-                        );
-                      },
-                    )
-                  : const Center(
-                      child: Icon(Icons.shopping_bag,
-                          size: 48, color: Colors.grey),
-                    ),
+              child: _ProductImage(product: product),
             ),
           ),
-          // Product info
           Expanded(
-            flex: 4,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Rating
-                  Row(
-                    children: [
-                      ...List.generate(5, (index) {
-                        return Icon(
-                          index < product.rating.floor()
-                              ? Icons.star
-                              : Icons.star_border,
-                          size: 12,
-                          color: Colors.amber,
-                        );
-                      }),
-                      const SizedBox(width: 4),
-                      Text(
-                        product.rating.toStringAsFixed(1),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  // Name
-                  Text(
-                    product.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  // Description
-                  Expanded(
-                    child: Text(
-                      product.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[600],
-                            fontSize: 11,
-                          ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  // Price and merchant
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '\$${product.price.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        product.merchant,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontSize: 10,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            ...List.generate(5, (index) {
+                              return Icon(
+                                index < product.rating.floor()
+                                    ? Icons.star
+                                    : Icons.star_border,
+                                size: 12,
+                                color: Colors.amber,
+                              );
+                            }),
+                            const SizedBox(width: 4),
+                            Text(
+                              product.rating.toStringAsFixed(1),
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Shop button
-                  SizedBox(
-                    height: 40,
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _launchUrl(product.affiliateLink),
-                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF111111),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
+                          ],
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        const SizedBox(height: 4),
+                        Text(
+                          product.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                         ),
-                        textStyle: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                        const Spacer(),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                '\$${product.price.toStringAsFixed(2)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                ProductLinkService.deriveMerchantLabel(
+                                    product.affiliateLink),
+                                textAlign: TextAlign.end,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      fontSize: 10,
+                                    ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      label: Text(I18nService.translate("Shop Now")),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+                SizedBox(
+                  height: 46,
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _launchUrl(context, product.affiliateLink),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF111111),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          bottom: Radius.circular(12),
+                        ),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    label: Text(I18nService.translate("Shop Now")),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -391,11 +386,30 @@ class _ProductCard extends StatelessWidget {
     );
   }
 
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null && await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  Future<void> _launchUrl(BuildContext context, String rawUrl) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final uri = ProductLinkService.parseHttpUri(rawUrl);
+    if (uri == null) {
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(I18nService.translate("Invalid product link.")),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
     }
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(I18nService.translate("Unable to open product link.")),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 }
 
@@ -412,12 +426,178 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedTextColor = selected ? Colors.white : const Color(0xFF344054);
     return FilterChip(
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
-      selectedColor: Theme.of(context).colorScheme.primaryContainer,
-      checkmarkColor: Theme.of(context).colorScheme.onPrimaryContainer,
+      selectedColor: const Color(0xFF111111),
+      checkmarkColor: Colors.white,
+      labelStyle: TextStyle(
+        color: selectedTextColor,
+        fontWeight: FontWeight.w600,
+      ),
+      side: const BorderSide(color: Color(0xFFD0D5DD)),
+      backgroundColor: const Color(0xFFF2F4F7),
+    );
+  }
+}
+
+class _ProductImage extends StatefulWidget {
+  const _ProductImage({required this.product});
+
+  final ProductRecommendation product;
+
+  @override
+  State<_ProductImage> createState() => _ProductImageState();
+}
+
+class _ProductImageState extends State<_ProductImage> {
+  int _attemptIndex = 0;
+
+  List<String> get _candidates {
+    final base = widget.product.imageUrl.trim();
+    final normalizedBase =
+        (base.isNotEmpty && ProductLinkService.parseHttpUri(base) != null)
+            ? base
+            : '';
+    return <String>{
+      if (normalizedBase.isNotEmpty) normalizedBase,
+    }.toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final urls = _candidates;
+    if (_attemptIndex >= urls.length) {
+      return _LocalProductPlaceholder(product: widget.product);
+    }
+
+    final url = urls[_attemptIndex];
+    return Image.network(
+      key: ValueKey(url),
+      url,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.grey[500],
+            ),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        if (_attemptIndex < urls.length - 1) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() => _attemptIndex += 1);
+          });
+        }
+        return _LocalProductPlaceholder(product: widget.product);
+      },
+    );
+  }
+}
+
+class _LocalProductPlaceholder extends StatelessWidget {
+  const _LocalProductPlaceholder({required this.product});
+
+  final ProductRecommendation product;
+
+  IconData _iconForCategory(String category) {
+    final normalized = category.toLowerCase();
+    if (normalized.contains('storage')) return Icons.inventory_2_outlined;
+    if (normalized.contains('organizer')) return Icons.grid_view_outlined;
+    if (normalized.contains('furniture')) return Icons.chair_outlined;
+    if (normalized.contains('cable')) return Icons.cable_outlined;
+    if (normalized.contains('fil')) return Icons.folder_open_outlined;
+    if (normalized.contains('hanger')) return Icons.checkroom_outlined;
+    return Icons.shopping_bag_outlined;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final merchant =
+        ProductLinkService.deriveMerchantLabel(product.affiliateLink);
+    return Container(
+      color: const Color(0xFFEDEFF2),
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _iconForCategory(product.category),
+                size: 16,
+                color: const Color(0xFF8A8A8A),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  merchant,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFF8A8A8A),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Text(
+            product.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF646464),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            product.category,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10,
+              color: Color(0xFF8A8A8A),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            '\$${product.price.toStringAsFixed(2)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF2E7D32),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            I18nService.translate('Image preview unavailable'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10,
+              color: Color(0xFF8A8A8A),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1222,7 +1222,8 @@ class _RecentScansState extends State<_RecentScans> {
             analysis: analysis,
             organizedUrl: organized,
             analysisDocId: doc.id,
-            organizedRegensUsed: organizedRegensUsed),
+            organizedRegensUsed: organizedRegensUsed,
+            sourceImageUrl: url),
       ),
     );
   }

@@ -48,20 +48,7 @@ class HistoryScreen extends StatelessWidget {
                   }
                 }
                 if (dedupedDocs.isEmpty) {
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (hasError)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                          child: _HistoryLiveWarning(),
-                        ),
-                      Text(I18nService.translate('no_scans_yet')),
-                    ],
-                  );
+                  return _EmptyHistoryState(hasError: hasError);
                 }
                 return Column(
                   children: [
@@ -146,7 +133,8 @@ class HistoryScreen extends StatelessWidget {
                                         organizedUrl: organizedUrl,
                                         analysisDocId: docId,
                                         organizedRegensUsed:
-                                            organizedRegensUsed),
+                                            organizedRegensUsed,
+                                        sourceImageUrl: imageUrl),
                                   ),
                                 );
                               }
@@ -303,4 +291,95 @@ class _HistoryCard extends StatelessWidget {
 
 String _format(DateTime d) {
   return DateFormat.yMMMd(I18nService.currentLocale.toString()).format(d);
+}
+
+class _EmptyHistoryState extends StatefulWidget {
+  final bool hasError;
+  const _EmptyHistoryState({required this.hasError});
+
+  @override
+  State<_EmptyHistoryState> createState() => _EmptyHistoryStateState();
+}
+
+class _EmptyHistoryStateState extends State<_EmptyHistoryState>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _scaleAnimation = Tween<double>(begin: 0.9, end: 1.05).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
+    );
+
+    _opacityAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (widget.hasError)
+          const Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 12,
+            ),
+            child: _HistoryLiveWarning(),
+          ),
+        const SizedBox(height: 24),
+        AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _scaleAnimation.value,
+              child: Opacity(
+                opacity: _opacityAnimation.value,
+                child: Container(
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withAlpha(20),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.photo_library_outlined,
+                    size: 64,
+                    color: Colors.grey[400],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 24),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            I18nService.translate('no_scans_yet'),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Colors.grey[600],
+                  height: 1.5,
+                ),
+          ),
+        ),
+      ],
+    );
+  }
 }

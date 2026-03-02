@@ -86,7 +86,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Image.asset('assets/clutterzen-logo-color.png', height: 36),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8.0),
+                      child: Image.asset('assets/clutterzen-logo-color.png',
+                          height: 36),
+                    ),
                     OutlinedButton(
                       onPressed: _onSkip,
                       style: OutlinedButton.styleFrom(

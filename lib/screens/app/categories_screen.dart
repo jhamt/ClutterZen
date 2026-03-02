@@ -513,6 +513,7 @@ class _CategoryScanTile extends StatelessWidget {
           organizedUrl: organized,
           analysisDocId: doc.id,
           organizedRegensUsed: organizedRegensUsed,
+          sourceImageUrl: url,
         ),
       ),
     );

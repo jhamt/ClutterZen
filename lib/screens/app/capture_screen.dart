@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -259,6 +260,86 @@ class _CaptureScreenState extends State<CaptureScreen> {
     }
   }
 
+  List<Map<String, dynamic>> _buildObjectDetectionsPayload(
+    VisionAnalysis analysis,
+  ) {
+    return analysis.objects
+        .take(60)
+        .map(
+          (obj) => {
+            'name': obj.name,
+            'confidence': obj.confidence,
+            'box': {
+              'left': obj.box.left,
+              'top': obj.box.top,
+              'width': obj.box.width,
+              'height': obj.box.height,
+            },
+          },
+        )
+        .toList(growable: false);
+  }
+
+  String _fallbackScanTitle(VisionAnalysis analysis) {
+    final names = analysis.objects.map((o) => o.name.toLowerCase()).toList();
+    final labels = analysis.labels.map((l) => l.toLowerCase()).toList();
+    bool hasAny(List<String> tokens) {
+      return names.any((item) => tokens.any(item.contains)) ||
+          labels.any((item) => tokens.any(item.contains));
+    }
+
+    if (hasAny(['desk', 'workspace', 'laptop', 'monitor'])) {
+      return 'Desk Reset Plan';
+    }
+    if (hasAny(['kitchen', 'plate', 'utensil', 'pan', 'counter'])) {
+      return 'Kitchen Reset Plan';
+    }
+    if (hasAny(['closet', 'wardrobe', 'clothing', 'hanger', 'shoe'])) {
+      return 'Closet Reset Plan';
+    }
+    if (hasAny(['garage', 'tool', 'storage'])) {
+      return 'Garage Reset Plan';
+    }
+    if (hasAny(['bathroom', 'sink', 'toilet', 'shower'])) {
+      return 'Bathroom Reset Plan';
+    }
+
+    final primary = analysis.objects.isNotEmpty
+        ? analysis.objects.first.name
+        : (analysis.labels.isNotEmpty ? analysis.labels.first : 'Space');
+    final normalized = primary
+        .replaceAll(RegExp(r'[_-]+'), ' ')
+        .split(' ')
+        .where((word) => word.isNotEmpty)
+        .map((word) => '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
+    return normalized.isEmpty ? 'Space Reset Plan' : '$normalized Reset Plan';
+  }
+
+  Future<String> _resolveScanTitle({
+    required VisionAnalysis analysis,
+    required String imageUrl,
+    required Uint8List imageBytes,
+  }) async {
+    final fallback = _fallbackScanTitle(analysis);
+    try {
+      final title = await Registry.gemini.generateScanTitle(
+        detectedObjects:
+            analysis.objects.map((entry) => entry.name).toList(growable: false),
+        labels: analysis.labels,
+        objectDetections: _buildObjectDetectionsPayload(analysis),
+        imageUrl: imageUrl,
+        imageBytes: imageBytes,
+        localeCode: I18nService.currentLocale.languageCode,
+      );
+      final trimmed = title.trim();
+      return trimmed.isEmpty ? fallback : trimmed;
+    } catch (error) {
+      debugPrint('Gemini scan title failed (using fallback): $error');
+      return fallback;
+    }
+  }
+
   Future<void> _analyze(
     String uid,
     int availableCredits, {
@@ -434,10 +515,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
 
                   // Save to Firestore (or queue if offline)
                   try {
+                    final scanTitle = await _resolveScanTitle(
+                      analysis: resolvedAnalysis,
+                      imageUrl: uploadUrl,
+                      imageBytes: bytes,
+                    );
                     analysisDocId = await Registry.analysis.createAndReturnId(
                       uid: uid,
-                      title:
-                          '${I18nService.translate("Scan from")} ${now.toLocal()}',
+                      title: scanTitle,
                       imageUrl: uploadUrl,
                       organizedImageUrl: organizedUrl ?? uploadUrl,
                       analysis: resolvedAnalysis,
@@ -483,6 +568,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
                             organizedUrl: organizedUrl ?? imageUrl,
                             analysisDocId: analysisDocId,
                             organizedRegensUsed: 0,
+                            sourceImageUrl:
+                                imageUrl.startsWith('http') ? imageUrl : null,
+                            sourceImageBytes: bytes,
                           ),
                         ),
                       );

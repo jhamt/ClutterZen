@@ -180,7 +180,12 @@ async function persistOrganizedImageForUser({
 }
 
 function getGeminiApiKey() {
-  return process.env.GEMINI_API_KEY || functions.config().gemini?.key || "";
+  return process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    functions.config().gemini?.key ||
+    functions.config().google?.ai_key ||
+    functions.config().vision?.key ||
+    "";
 }
 
 function extractGeminiText(responseJson) {
@@ -281,32 +286,198 @@ function normalizeRecommendationPayload(rawPayload) {
   });
 
   const summary = payload.summary ? String(payload.summary) : null;
-  return {summary, services, products, diyPlan};
+  const meta = payload.meta && typeof payload.meta === "object" ? {
+    source: payload.meta.source ? String(payload.meta.source) : null,
+    qualityPassed: typeof payload.meta.qualityPassed === "boolean" ?
+      payload.meta.qualityPassed :
+      null,
+    model: payload.meta.model ? String(payload.meta.model) : null,
+  } : null;
+  return {summary, services, products, diyPlan, meta};
 }
 
-function buildGeminiRecommendationPrompt({
+function _normalizeObjectName(raw) {
+  return String(raw || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .slice(0, 60);
+}
+
+function _stepRangeForScore(score) {
+  if (score <= 30) return {min: 7, max: 8};
+  if (score <= 65) return {min: 8, max: 10};
+  return {min: 10, max: 12};
+}
+
+function _inferRoomType(names) {
+  const hasAny = (tokens) => names.some((name) =>
+    tokens.some((token) => name.includes(token)));
+  if (hasAny([
+    "refrigerator", "stove", "microwave", "utensil", "plate", "pan", "kitchen",
+  ])) return "Kitchen";
+  if (hasAny([
+    "bed", "pillow", "blanket", "dresser", "closet", "wardrobe", "clothing",
+  ])) return "Bedroom";
+  if (hasAny([
+    "toilet", "sink", "shower", "soap", "toothbrush", "bathroom",
+  ])) return "Bathroom";
+  if (hasAny([
+    "desk", "laptop", "computer", "monitor", "keyboard", "office", "paper",
+  ])) return "Office";
+  if (hasAny([
+    "tool", "garage", "paint", "ladder", "bike", "workbench",
+  ])) return "Garage/Storage";
+  if (hasAny([
+    "sofa", "couch", "television", "remote", "living room",
+  ])) return "Living Room";
+  return "General Space";
+}
+
+function _buildSafetySignals(names) {
+  const hazards = [];
+  const addIfPresent = (tokens, label) => {
+    if (names.some((name) => tokens.some((token) => name.includes(token)))) {
+      hazards.push(label);
+    }
+  };
+  addIfPresent(["knife", "scissor", "blade", "tool"], "sharp objects");
+  addIfPresent(["chemical", "cleaner", "bleach", "detergent", "paint"], "chemicals");
+  addIfPresent(["cable", "charger", "wire", "extension"], "cable hazards");
+  addIfPresent(["glass", "ceramic"], "fragile items");
+  return hazards;
+}
+
+function normalizeRecommendationContext({
   spaceDescription,
   detectedObjects,
   clutterScore,
+  labels,
+  objectDetections,
+  zoneHotspots,
+  localeCode,
+  detailLevel,
 }) {
   const safeObjects = Array.isArray(detectedObjects) ?
-    detectedObjects.map((value) => String(value).trim()).filter((value) => value) :
+    detectedObjects.map(_normalizeObjectName).filter((value) => value) :
     [];
-  const objectsLine = safeObjects.length ? safeObjects.join(", ") : "none";
-  const scoreLine =
-    Number.isFinite(Number(clutterScore)) ? Number(clutterScore) : 50;
-  const descriptionLine = spaceDescription ? String(spaceDescription) : "";
+  const safeDetections = Array.isArray(objectDetections) ?
+    objectDetections
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") return null;
+          const name = _normalizeObjectName(entry.name);
+          const confidence = Number(entry.confidence);
+          const box = entry.box && typeof entry.box === "object" ? entry.box : {};
+          if (!name) return null;
+          return {
+            name,
+            confidence: Number.isFinite(confidence) ? confidence : 0.5,
+            box: {
+              left: Number.isFinite(Number(box.left)) ? Number(box.left) : 0,
+              top: Number.isFinite(Number(box.top)) ? Number(box.top) : 0,
+              width: Number.isFinite(Number(box.width)) ? Number(box.width) : 0,
+              height: Number.isFinite(Number(box.height)) ? Number(box.height) : 0,
+            },
+          };
+        })
+        .filter(Boolean)
+        .slice(0, 80) :
+    [];
+  const safeZones = Array.isArray(zoneHotspots) ?
+    zoneHotspots
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") return null;
+          const zoneName = String(entry.name || "").trim().toLowerCase();
+          const count = Number(entry.objectCount);
+          const dominant = Array.isArray(entry.dominantItems) ?
+            entry.dominantItems.map(_normalizeObjectName).filter((value) => value) :
+            [];
+          if (!zoneName) return null;
+          return {
+            name: zoneName,
+            objectCount: Number.isFinite(count) ? count : dominant.length,
+            dominantItems: dominant.slice(0, 5),
+          };
+        })
+        .filter(Boolean)
+        .slice(0, 8) :
+    [];
+  const safeLabels = Array.isArray(labels) ?
+    labels.map((value) => String(value).trim()).filter((value) => value).slice(0, 15) :
+    [];
+  const score = Number.isFinite(Number(clutterScore)) ?
+    Math.max(0, Math.min(100, Number(clutterScore))) :
+    50;
+
+  const weightedCounts = {};
+  for (const detection of safeDetections) {
+    weightedCounts[detection.name] =
+      (weightedCounts[detection.name] || 0) + Math.max(0.35, detection.confidence);
+  }
+  for (const objectName of safeObjects) {
+    weightedCounts[objectName] = (weightedCounts[objectName] || 0) + 1;
+  }
+  const topItems = Object.entries(weightedCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name]) => name);
+  const namesForInference = topItems.length ?
+    topItems :
+    safeObjects.slice(0, 12);
+  const roomType = _inferRoomType(namesForInference);
+  const stepRange = _stepRangeForScore(score);
+  const safetySignals = _buildSafetySignals(namesForInference);
+
+  return {
+    spaceDescription: spaceDescription ? String(spaceDescription).trim() : "",
+    detectedObjects: safeObjects,
+    labels: safeLabels,
+    objectDetections: safeDetections,
+    zoneHotspots: safeZones,
+    clutterScore: score,
+    stepRange,
+    topItems,
+    roomType,
+    safetySignals,
+    localeCode: String(localeCode || "en").trim().toLowerCase() || "en",
+    detailLevel: String(detailLevel || "balanced").trim().toLowerCase() || "balanced",
+  };
+}
+
+function buildGeminiRecommendationPrompt({context}) {
+  const objectsLine = context.topItems.length ?
+    context.topItems.join(", ") :
+    "none";
+  const labelsLine = context.labels.length ? context.labels.join(", ") : "none";
+  const zonesLine = context.zoneHotspots.length ?
+    context.zoneHotspots
+        .map((zone) => `${zone.name} (${zone.objectCount} items)`)
+        .join("; ") :
+    "none";
+  const safetyLine = context.safetySignals.length ?
+    context.safetySignals.join(", ") :
+    "none";
 
   return `
-You are an expert home organizer. Create practical recommendations for this cluttered space.
+You are a professional home organization consultant.
+Create a highly practical, precise, and implementation-ready plan.
 
-Space description: ${descriptionLine || "not provided"}
-Detected objects: ${objectsLine}
-Clutter score (0-100): ${scoreLine}
+CONTEXT
+- Room type: ${context.roomType}
+- Space description: ${context.spaceDescription || "not provided"}
+- Detected inventory (top weighted): ${objectsLine}
+- Labels: ${labelsLine}
+- Zone hotspots: ${zonesLine}
+- Safety signals: ${safetyLine}
+- Clutter score: ${context.clutterScore}/100
+- Detail profile: ${context.detailLevel}
+- Output language: ${context.localeCode} (fallback to English if needed)
 
-Respond with strict JSON only in this shape:
+OUTPUT CONTRACT
+- Return strict JSON only.
+- Use this exact schema:
 {
-  "summary": "Short overall plan",
+  "summary": "Detailed strategic summary",
   "services": [
     {"name":"", "description":"", "category":"", "estimatedCost": 0}
   ],
@@ -318,12 +489,577 @@ Respond with strict JSON only in this shape:
   ]
 }
 
-Rules:
-- Keep services to 2-4 entries.
-- Keep products to 3-6 entries.
-- Keep DIY plan to 4-6 steps.
+QUALITY RULES
+- DIY steps must be ${context.stepRange.min}-${context.stepRange.max} steps.
+- Every step description must include:
+  1) objective,
+  2) concrete actions,
+  3) verification checkpoint.
+- Every step must include 2-4 practical tips.
+- Use scan-specific details (objects/zones/safety), avoid generic advice.
+- Keep services to 2-4 items and products to 3-6 items.
 - Output valid JSON only.
 `.trim();
+}
+
+function buildGeminiRepairPrompt({context, candidate, quality}) {
+  return `
+Revise the previous recommendation. It failed quality checks.
+Fix every issue and return strict JSON with the same schema.
+
+Detected quality issues:
+- ${quality.issues.join("\n- ")}
+
+Existing candidate summary:
+${candidate.summary || "none"}
+
+Constraints reminder:
+- Steps must be ${context.stepRange.min}-${context.stepRange.max}.
+- Every step: objective + concrete actions + verification in description.
+- 2-4 practical tips per step.
+- Reference detected objects/zones/safety context.
+- Output language: ${context.localeCode} (fallback to English).
+- Strict JSON only.
+`.trim();
+}
+
+function _wordCount(text) {
+  return String(text || "")
+      .trim()
+      .split(/\s+/)
+      .filter((token) => token)
+      .length;
+}
+
+function evaluateRecommendationQuality({payload, context}) {
+  const issues = [];
+  const steps = Array.isArray(payload?.diyPlan) ? payload.diyPlan : [];
+
+  if (steps.length < context.stepRange.min || steps.length > context.stepRange.max) {
+    issues.push(
+        `Step count ${steps.length} is outside required range ` +
+        `${context.stepRange.min}-${context.stepRange.max}.`,
+    );
+  }
+  if (_wordCount(payload?.summary) < 16) {
+    issues.push("Summary is too short.");
+  }
+
+  let contextCoverage = 0;
+  const contextTokens = [
+    ...context.topItems.slice(0, 8),
+    ...context.zoneHotspots.map((zone) => zone.name),
+    ...context.safetySignals,
+  ].filter((token) => token && token.length > 3);
+
+  for (const step of steps) {
+    const descriptionWords = _wordCount(step?.description);
+    if (descriptionWords < 24) {
+      issues.push(`Step ${step?.stepNumber || "?"} description is too short.`);
+    }
+
+    const tips = Array.isArray(step?.tips) ? step.tips.filter((tip) => String(tip).trim()) : [];
+    if (tips.length < 2 || tips.length > 4) {
+      issues.push(`Step ${step?.stepNumber || "?"} must include 2-4 tips.`);
+    }
+
+    const text = `${step?.title || ""} ${step?.description || ""} ${tips.join(" ")}`.toLowerCase();
+    const hasObjectiveSignal = /(objective|goal|target|purpose)\b/.test(text);
+    const hasActionSignal = /(action|actions|sort|group|label|assign|remove|place|store|discard|donate|relocate|organize|reset|install|review|maintain)\b/.test(text);
+    const hasVerificationSignal =
+      /(verify|verification|checkpoint|confirm|ensure|check|measure|photo)\b/.test(text);
+    if (!hasActionSignal) {
+      issues.push(
+          `Step ${step?.stepNumber || "?"} must include concrete actions.`,
+      );
+    }
+    if (!hasObjectiveSignal && descriptionWords < 28) {
+      issues.push(
+          `Step ${step?.stepNumber || "?"} needs a clearer objective.`,
+      );
+    }
+    if (!hasVerificationSignal && descriptionWords < 32) {
+      issues.push(
+          `Step ${step?.stepNumber || "?"} needs a clearer verification checkpoint.`,
+      );
+    }
+
+    if (contextTokens.length) {
+      const matched = contextTokens.some((token) => text.includes(token.toLowerCase()));
+      if (matched) contextCoverage += 1;
+    }
+  }
+
+  if (contextTokens.length) {
+    const minimumCoverage = Math.max(2, Math.ceil(steps.length * 0.35));
+    if (contextCoverage < minimumCoverage) {
+      issues.push("Plan does not reference enough detected context.");
+    }
+  }
+
+  return {
+    passed: issues.length === 0,
+    issues,
+    contextCoverage,
+    stepCount: steps.length,
+  };
+}
+
+function _categoryFromName(name) {
+  const value = String(name || "").toLowerCase();
+  if ([
+    "shirt", "pants", "dress", "jacket", "shoe", "clothing", "sock", "closet",
+  ].some((token) => value.includes(token))) return "clothing";
+  if ([
+    "book", "paper", "document", "folder", "notebook", "magazine",
+  ].some((token) => value.includes(token))) return "paperwork";
+  if ([
+    "laptop", "computer", "phone", "cable", "charger", "monitor", "keyboard",
+  ].some((token) => value.includes(token))) return "electronics";
+  if ([
+    "plate", "bowl", "pan", "utensil", "food", "kitchen", "cup",
+  ].some((token) => value.includes(token))) return "kitchen";
+  return "general";
+}
+
+function _fallbackStepRange(score) {
+  if (score <= 30) return {min: 7, max: 8, target: 8};
+  if (score <= 65) return {min: 8, max: 10, target: 9};
+  return {min: 10, max: 12, target: 11};
+}
+
+function _buildFallbackSummary(context) {
+  const severity = context.clutterScore <= 30 ?
+    "light clutter" :
+    context.clutterScore <= 65 ?
+      "moderate clutter" :
+      "high clutter";
+  const focusItems = context.topItems.length ?
+    context.topItems.slice(0, 5).join(", ") :
+    "mixed household items";
+  return (
+    `This ${severity} plan prioritizes ${focusItems} with zone-by-zone execution, ` +
+    "clear verification checkpoints, and maintenance steps to prevent re-cluttering."
+  );
+}
+
+function _buildFallbackServices(context) {
+  const base = [
+    {
+      name: "Professional Organizer Session",
+      description: "Structured zone reset and storage system setup for long-term maintenance.",
+      category: `${context.roomType} Organization`,
+      estimatedCost: context.clutterScore > 65 ? 300 : 180,
+    },
+    {
+      name: "Donation and Disposal Pickup",
+      description: "Removes sorted discard and donation piles quickly after declutter.",
+      category: "Junk Removal",
+      estimatedCost: context.clutterScore > 65 ? 140 : 90,
+    },
+  ];
+  if (context.safetySignals.includes("chemicals")) {
+    base.push({
+      name: "Hazardous Storage Setup",
+      description: "Installs safe, labeled storage for chemicals and cleaning materials.",
+      category: "Safety Organization",
+      estimatedCost: 120,
+    });
+  }
+  return base.slice(0, 4);
+}
+
+function _buildFallbackProducts(_context) {
+  const products = [
+    {
+      name: "Clear Stackable Bins Set",
+      description: "Improves visibility and prevents hidden pile buildup in each zone.",
+      category: "Storage",
+      price: 38,
+    },
+    {
+      name: "Adjustable Drawer Dividers",
+      description: "Creates fixed homes for frequently used small items.",
+      category: "Organizers",
+      price: 24,
+    },
+    {
+      name: "Label Kit",
+      description: "Keeps categories legible and easier to maintain by all household members.",
+      category: "Labels",
+      price: 18,
+    },
+    {
+      name: "Cable Management Set",
+      description: "Reduces visual noise and trip hazards from loose wires and chargers.",
+      category: "Electronics",
+      price: 16,
+    },
+  ];
+  return products.slice(0, 6);
+}
+
+function buildSmartFallbackRecommendation(context) {
+  const range = _fallbackStepRange(context.clutterScore);
+  const topItems = context.topItems.length ?
+    context.topItems :
+    ["mixed household items"];
+  const categories = topItems
+      .map((item) => _categoryFromName(item))
+      .filter((value, index, all) => all.indexOf(value) === index)
+      .slice(0, 4);
+
+  const plan = [];
+  let stepNumber = 1;
+  plan.push({
+    stepNumber: stepNumber++,
+    title: "Prepare sorting and staging stations",
+    description:
+      "Objective: establish control before organizing. Actions: set up keep/relocate/donate/recycle/trash stations, gather bins and labels, and clear one staging surface. Verification: all stations are ready and visible before item handling starts.",
+    tips: [
+      "Time-box setup to 15 minutes.",
+      "Take a baseline photo for progress tracking.",
+      "Start with protective gloves if sharp or dirty items are present.",
+    ],
+  });
+  plan.push({
+    stepNumber: stepNumber++,
+    title: "Run a rapid clutter triage pass",
+    description:
+      `Objective: remove immediate visual overload. Actions: collect loose ${topItems.slice(0, 3).join(", ")} into temporary bins and clear walking paths first. Verification: key surfaces and floor paths are at least 70% clear.`,
+    tips: [
+      "Do not micro-organize during triage.",
+      "Use one timer block (20-25 minutes) to maintain pace.",
+      "Discard obvious trash and expired consumables immediately.",
+    ],
+  });
+
+  for (const zone of context.zoneHotspots.slice(0, 3)) {
+    if (plan.length >= range.target - 2) break;
+    const dominant = zone.dominantItems.length ?
+      zone.dominantItems.join(", ") :
+      topItems.slice(0, 2).join(", ");
+    plan.push({
+      stepNumber: stepNumber++,
+      title: `Reset ${zone.name} zone`,
+      description:
+        `Objective: make ${zone.name} functional and stable. Actions: empty the zone, group ${dominant} by frequency and purpose, and return only essentials with clear front access. Verification: no unstable stacks remain and zone boundaries are clear.`,
+      tips: [
+        "Finish one zone fully before moving on.",
+        "Place high-frequency items in easiest-reach positions.",
+        "Use shallow containers to prevent hidden piles.",
+      ],
+    });
+  }
+
+  for (const category of categories) {
+    if (plan.length >= range.target - 1) break;
+    plan.push({
+      stepNumber: stepNumber++,
+      title: `Standardize ${category} storage`,
+      description:
+        `Objective: prevent category drift. Actions: assign one home for ${category} items, remove duplicates, and label the final storage location. Verification: every ${category} item is either stored intentionally or removed from the space.`,
+      tips: [
+        "Keep only currently used items in prime-access areas.",
+        "Archive seasonal backups separately.",
+      ],
+    });
+  }
+
+  plan.push({
+    stepNumber: stepNumber++,
+    title: "Install maintenance routine",
+    description:
+      "Objective: preserve organization quality. Actions: define a 5-minute daily reset and a 20-minute weekly review for re-homing and bin corrections. Verification: maintenance checklist is documented and visible in the room.",
+    tips: [
+      "Attach reset to an existing routine (after dinner or before bed).",
+      "Track weekly loose-item count on key surfaces.",
+      "Adjust labels when category boundaries change.",
+    ],
+  });
+
+  while (plan.length < range.min) {
+    plan.push({
+      stepNumber: stepNumber++,
+      title: "Perform final quality walk-through",
+      description:
+        "Objective: close remaining gaps before completion. Actions: inspect each zone clockwise, fix misplacements, and remove temporary sorting bins. Verification: no loose piles remain and every active item has a labeled home.",
+      tips: [
+        "Keep this check under 10 minutes.",
+        "Use the same walk order every session.",
+      ],
+    });
+  }
+
+  return {
+    summary: _buildFallbackSummary(context),
+    services: _buildFallbackServices(context),
+    products: _buildFallbackProducts(context),
+    diyPlan: plan.slice(0, range.max),
+  };
+}
+
+const _SAFE_IMAGE_HOST_SUFFIXES = [
+  "firebasestorage.googleapis.com",
+  "storage.googleapis.com",
+  "googleusercontent.com",
+];
+
+function isSafeImageUrlForGemini(rawUrl) {
+  try {
+    const parsed = new URL(String(rawUrl || ""));
+    if (parsed.protocol !== "https:") return false;
+    const hostname = parsed.hostname.toLowerCase();
+    return _SAFE_IMAGE_HOST_SUFFIXES.some((suffix) =>
+      hostname === suffix || hostname.endsWith(`.${suffix}`));
+  } catch {
+    return false;
+  }
+}
+
+function normalizeImageBase64Input(rawValue) {
+  if (!rawValue || typeof rawValue !== "string") return null;
+  const trimmed = rawValue.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 7_000_000) return null;
+
+  const dataUrlMatch = trimmed.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (dataUrlMatch) {
+    return {mimeType: dataUrlMatch[1], data: dataUrlMatch[2]};
+  }
+
+  if (!/^[A-Za-z0-9+/=\n\r]+$/.test(trimmed)) return null;
+  return {mimeType: "image/jpeg", data: trimmed.replace(/\s+/g, "")};
+}
+
+async function fetchImageContextFromUrl(imageUrl) {
+  if (!isSafeImageUrlForGemini(imageUrl)) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000);
+  try {
+    const response = await fetch(String(imageUrl), {signal: controller.signal});
+    if (!response.ok) return null;
+    const contentType = (response.headers.get("content-type") || "image/jpeg")
+        .split(";")[0]
+        .trim();
+    if (!contentType.startsWith("image/")) return null;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!bytes.length || bytes.length > 4 * 1024 * 1024) return null;
+    return {mimeType: contentType, data: bytes.toString("base64")};
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function withRecommendationMeta(payload, meta) {
+  return {
+    ...payload,
+    meta: {
+      source: meta.source,
+      qualityPassed: meta.qualityPassed,
+      model: meta.model,
+    },
+  };
+}
+
+function _sanitizeScanTitleCandidate(rawTitle) {
+  const title = String(rawTitle || "")
+      .replace(/[\r\n\t]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  if (!title) return null;
+  if (title.length < 4 || title.length > 72) return null;
+
+  const words = title.split(" ").filter((word) => word);
+  if (words.length < 2 || words.length > 7) return null;
+
+  const genericTokens = new Set([
+    "scan",
+    "photo",
+    "image",
+    "room",
+    "space",
+    "clutter",
+    "organization",
+    "organizing",
+    "plan",
+  ]);
+  const hasSpecificWord = words.some((word) => {
+    const normalized = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return normalized && !genericTokens.has(normalized);
+  });
+  if (!hasSpecificWord) return null;
+
+  return title;
+}
+
+function _toSimpleTitleCase(raw) {
+  return String(raw || "")
+      .split(" ")
+      .map((word) => {
+        if (!word) return "";
+        return `${word[0].toUpperCase()}${word.slice(1).toLowerCase()}`;
+      })
+      .join(" ")
+      .trim();
+}
+
+function buildFallbackScanTitle({detectedObjects, labels}) {
+  const names = Array.isArray(detectedObjects) ?
+    detectedObjects.map(_normalizeObjectName).filter((value) => value) :
+    [];
+  const safeLabels = Array.isArray(labels) ?
+    labels.map((value) => String(value).trim().toLowerCase()).filter((value) => value) :
+    [];
+
+  const hasAny = (tokens) => names.some((name) =>
+    tokens.some((token) => name.includes(token))) ||
+    safeLabels.some((label) => tokens.some((token) => label.includes(token)));
+
+  if (hasAny(["desk", "monitor", "laptop", "keyboard", "workspace", "office"])) {
+    return "Desk Reset Plan";
+  }
+  if (hasAny(["kitchen", "utensil", "plate", "pan", "counter"])) {
+    return "Kitchen Reset Plan";
+  }
+  if (hasAny(["closet", "wardrobe", "clothing", "shoe", "hanger"])) {
+    return "Closet Reset Plan";
+  }
+  if (hasAny(["garage", "tool", "workbench", "storage bin"])) {
+    return "Garage Reset Plan";
+  }
+  if (hasAny(["bathroom", "sink", "toilet", "shower", "cabinet"])) {
+    return "Bathroom Reset Plan";
+  }
+
+  const primary =
+    names[0] ||
+    safeLabels[0] ||
+    "space";
+  const normalizedPrimary = _toSimpleTitleCase(primary.replace(/[-_]/g, " "));
+  const candidate = _sanitizeScanTitleCandidate(`${normalizedPrimary} Reset Plan`);
+  return candidate || "Space Reset Plan";
+}
+
+function buildGeminiScanTitlePrompt({detectedObjects, labels, localeCode}) {
+  const objectLine = Array.isArray(detectedObjects) && detectedObjects.length ?
+    detectedObjects.slice(0, 15).join(", ") :
+    "none";
+  const labelLine = Array.isArray(labels) && labels.length ?
+    labels.slice(0, 12).join(", ") :
+    "none";
+  const locale = String(localeCode || "en").trim().toLowerCase() || "en";
+
+  return `
+You generate concise, specific scan titles for a home organization app.
+Use visible evidence from the provided image first, then use detected context.
+
+CONTEXT
+- Detected objects: ${objectLine}
+- Labels: ${labelLine}
+- Output language: ${locale} (fallback to English)
+
+OUTPUT CONTRACT
+- Return strict JSON only in this schema:
+{
+  "title": ""
+}
+
+TITLE RULES
+- 2 to 6 words.
+- Specific to the scanned scene (room/zone/items).
+- Avoid generic terms like scan, photo, image, room, clutter, or plan.
+- No emojis.
+`.trim();
+}
+
+async function generateGeminiScanTitle({
+  apiKey,
+  detectedObjects,
+  labels,
+  imageUrl,
+  imageBase64,
+  localeCode,
+}) {
+  const safeObjects = Array.isArray(detectedObjects) ?
+    detectedObjects.map(_normalizeObjectName).filter((value) => value).slice(0, 30) :
+    [];
+  const safeLabels = Array.isArray(labels) ?
+    labels.map((value) => String(value).trim()).filter((value) => value).slice(0, 20) :
+    [];
+  const fallbackTitle = buildFallbackScanTitle({
+    detectedObjects: safeObjects,
+    labels: safeLabels,
+  });
+  const prompt = buildGeminiScanTitlePrompt({
+    detectedObjects: safeObjects,
+    labels: safeLabels,
+    localeCode,
+  });
+  const inlineImage = normalizeImageBase64Input(imageBase64) ||
+    await fetchImageContextFromUrl(imageUrl);
+  const userParts = inlineImage ?
+    [
+      {inlineData: {mimeType: inlineImage.mimeType, data: inlineImage.data}},
+      {text: prompt},
+    ] :
+    [{text: prompt}];
+
+  let lastError = null;
+  for (const modelName of GEMINI_TEXT_MODELS) {
+    try {
+      const responseJson = await callGeminiGenerateContent({
+        apiKey,
+        modelName,
+        payload: {
+          contents: [
+            {
+              role: "user",
+              parts: userParts,
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 120,
+            responseMimeType: "application/json",
+          },
+        },
+      });
+      const text = extractGeminiText(responseJson);
+      if (!text) continue;
+      const parsed = parseJsonFromMarkdown(text);
+      const rawTitle =
+        parsed && typeof parsed === "object" && parsed.title ?
+          parsed.title :
+          text;
+      const title = _sanitizeScanTitleCandidate(rawTitle);
+      if (title) {
+        return {
+          title,
+          source: "ai",
+          model: modelName,
+          usedImage: Boolean(inlineImage),
+        };
+      }
+    } catch (error) {
+      lastError = error;
+      functions.logger.warn(`Gemini scan title failed on ${modelName}`, error);
+    }
+  }
+
+  if (lastError) {
+    functions.logger.warn("All Gemini models failed for scan title; using fallback", {
+      reason: String(lastError.message || lastError),
+    });
+  }
+  return {
+    title: fallbackTitle,
+    source: "smart_fallback",
+    model: "smart_fallback",
+    usedImage: Boolean(inlineImage),
+  };
 }
 
 async function callGeminiGenerateContent({apiKey, modelName, payload}) {
@@ -348,12 +1084,33 @@ async function generateGeminiRecommendations({
   spaceDescription,
   detectedObjects,
   clutterScore,
+  labels,
+  objectDetections,
+  zoneHotspots,
+  imageUrl,
+  imageBase64,
+  localeCode,
+  detailLevel,
 }) {
-  const prompt = buildGeminiRecommendationPrompt({
+  const context = normalizeRecommendationContext({
     spaceDescription,
     detectedObjects,
     clutterScore,
+    labels,
+    objectDetections,
+    zoneHotspots,
+    localeCode,
+    detailLevel,
   });
+  const prompt = buildGeminiRecommendationPrompt({context});
+  const inlineImage = normalizeImageBase64Input(imageBase64) ||
+    await fetchImageContextFromUrl(imageUrl);
+  const userParts = inlineImage ?
+    [
+      {inlineData: {mimeType: inlineImage.mimeType, data: inlineImage.data}},
+      {text: prompt},
+    ] :
+    [{text: prompt}];
 
   let lastError = null;
   for (const modelName of GEMINI_TEXT_MODELS) {
@@ -365,12 +1122,12 @@ async function generateGeminiRecommendations({
           contents: [
             {
               role: "user",
-              parts: [{text: prompt}],
+              parts: userParts,
             },
           ],
           generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
+            temperature: 0.35,
+            maxOutputTokens: 4096,
             responseMimeType: "application/json",
           },
         },
@@ -380,15 +1137,120 @@ async function generateGeminiRecommendations({
       const parsed = parseJsonFromMarkdown(text);
       if (!parsed) continue;
       const normalized = normalizeRecommendationPayload(parsed);
-      return {modelName, data: normalized};
+      const quality = evaluateRecommendationQuality({
+        payload: normalized,
+        context,
+      });
+
+      if (quality.passed) {
+        functions.logger.info("Gemini recommendation quality passed", {
+          model: modelName,
+          source: "ai",
+          stepCount: quality.stepCount,
+          contextCoverage: quality.contextCoverage,
+          clutterScore: context.clutterScore,
+        });
+        return {
+          modelName,
+          data: withRecommendationMeta(normalized, {
+            source: "ai",
+            qualityPassed: true,
+            model: modelName,
+          }),
+        };
+      }
+
+      functions.logger.warn("Gemini recommendation quality failed; retrying", {
+        model: modelName,
+        issues: quality.issues,
+        stepCount: quality.stepCount,
+        contextCoverage: quality.contextCoverage,
+      });
+
+      const repairPrompt = buildGeminiRepairPrompt({
+        context,
+        candidate: normalized,
+        quality,
+      });
+      const repairParts = inlineImage ?
+        [
+          {inlineData: {mimeType: inlineImage.mimeType, data: inlineImage.data}},
+          {text: repairPrompt},
+        ] :
+        [{text: repairPrompt}];
+      const retryResponseJson = await callGeminiGenerateContent({
+        apiKey,
+        modelName,
+        payload: {
+          contents: [
+            {
+              role: "user",
+              parts: repairParts,
+            },
+          ],
+          generationConfig: {
+            temperature: 0.25,
+            maxOutputTokens: 4096,
+            responseMimeType: "application/json",
+          },
+        },
+      });
+      const retryText = extractGeminiText(retryResponseJson);
+      const retryParsed = retryText ? parseJsonFromMarkdown(retryText) : null;
+      if (!retryParsed) {
+        continue;
+      }
+      const retryNormalized = normalizeRecommendationPayload(retryParsed);
+      const retryQuality = evaluateRecommendationQuality({
+        payload: retryNormalized,
+        context,
+      });
+      if (retryQuality.passed) {
+        functions.logger.info("Gemini recommendation retry quality passed", {
+          model: modelName,
+          source: "ai_retry",
+          stepCount: retryQuality.stepCount,
+          contextCoverage: retryQuality.contextCoverage,
+          clutterScore: context.clutterScore,
+        });
+        return {
+          modelName,
+          data: withRecommendationMeta(retryNormalized, {
+            source: "ai_retry",
+            qualityPassed: true,
+            model: modelName,
+          }),
+        };
+      }
+
+      functions.logger.warn("Gemini retry quality still below threshold", {
+        model: modelName,
+        issues: retryQuality.issues,
+        stepCount: retryQuality.stepCount,
+        contextCoverage: retryQuality.contextCoverage,
+      });
     } catch (error) {
       lastError = error;
       functions.logger.warn(`Gemini recommendation failed on ${modelName}`, error);
     }
   }
 
-  if (lastError) throw lastError;
-  throw new Error("All Gemini recommendation models returned empty output");
+  if (lastError) {
+    functions.logger.warn("All Gemini models failed, using smart fallback", {
+      reason: String(lastError.message || lastError),
+      clutterScore: context.clutterScore,
+      roomType: context.roomType,
+    });
+  }
+  const fallback = buildSmartFallbackRecommendation(context);
+  return {
+    modelName: "smart_fallback",
+    data: withRecommendationMeta(fallback, {
+      source: "smart_fallback",
+      qualityPassed: false,
+      model: "smart_fallback",
+    }),
+  };
 }
 
 async function generateGeminiImageFallback({
@@ -502,6 +1364,721 @@ async function getOwnedConnectedAccountId(userId) {
   if (!doc.exists) return null;
   const accountId = doc.data()?.accountId;
   return typeof accountId === "string" && accountId ? accountId : null;
+}
+
+function getGooglePlacesApiKey() {
+  return process.env.GOOGLE_PLACES_API_KEY ||
+    functions.config().google?.places_key ||
+    functions.config().google?.places?.key ||
+    "";
+}
+
+function getMapsDailyQuotaCaps() {
+  const mapsConfig = functions.config().maps || {};
+  const parseCap = (envKey, configKey, fallback) => {
+    const envValue = Number(process.env[envKey]);
+    if (Number.isFinite(envValue) && envValue > 0) {
+      return Math.floor(envValue);
+    }
+    const configValue = Number(mapsConfig[configKey]);
+    if (Number.isFinite(configValue) && configValue > 0) {
+      return Math.floor(configValue);
+    }
+    return fallback;
+  };
+  return {
+    nearby: parseCap("MAPS_DAILY_NEARBY_CAP", "daily_nearby_cap", 24),
+    text: parseCap("MAPS_DAILY_TEXT_CAP", "daily_text_cap", 8),
+    details: parseCap("MAPS_DAILY_DETAILS_CAP", "daily_details_cap", 28),
+    geocode: parseCap("MAPS_DAILY_GEOCODE_CAP", "daily_geocode_cap", 300),
+    premium: parseCap("MAPS_DAILY_PREMIUM_CAP", "daily_premium_cap", 30),
+  };
+}
+
+function getUtcDateKey() {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(now.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeQuotaUnits(units) {
+  const sanitize = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return Math.floor(parsed);
+  };
+  const nearby = sanitize(units?.nearby);
+  const text = sanitize(units?.text);
+  const details = sanitize(units?.details);
+  const geocode = sanitize(units?.geocode);
+  const premiumInput = sanitize(units?.premium);
+  const premium = premiumInput > 0 ? premiumInput : nearby + text + details;
+  return {
+    nearby,
+    text,
+    details,
+    geocode,
+    premium,
+  };
+}
+
+async function reserveMapsDailyQuota(units) {
+  const planned = normalizeQuotaUnits(units);
+  const caps = getMapsDailyQuotaCaps();
+  const dateKey = getUtcDateKey();
+  const ref = admin.firestore()
+      .collection("maps_api_usage_daily")
+      .doc(dateKey);
+
+  let allowed = false;
+  let usageSnapshot = {
+    nearby: 0,
+    text: 0,
+    details: 0,
+    geocode: 0,
+    premium: 0,
+  };
+
+  await admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.data() || {};
+    const current = {
+      nearby: Math.max(0, Number(data.nearby || 0)),
+      text: Math.max(0, Number(data.text || 0)),
+      details: Math.max(0, Number(data.details || 0)),
+      geocode: Math.max(0, Number(data.geocode || 0)),
+      premium: Math.max(0, Number(data.premium || 0)),
+    };
+    usageSnapshot = current;
+
+    const wouldExceed =
+      current.nearby + planned.nearby > caps.nearby ||
+      current.text + planned.text > caps.text ||
+      current.details + planned.details > caps.details ||
+      current.geocode + planned.geocode > caps.geocode ||
+      current.premium + planned.premium > caps.premium;
+
+    if (wouldExceed) {
+      allowed = false;
+      return;
+    }
+
+    allowed = true;
+    usageSnapshot = {
+      nearby: current.nearby + planned.nearby,
+      text: current.text + planned.text,
+      details: current.details + planned.details,
+      geocode: current.geocode + planned.geocode,
+      premium: current.premium + planned.premium,
+    };
+    tx.set(ref, {
+      ...usageSnapshot,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      dateKey,
+    }, {merge: true});
+  });
+
+  return {
+    allowed,
+    dateKey,
+    caps,
+    usage: usageSnapshot,
+    planned,
+  };
+}
+
+function shouldIncludePlacePhotoUrls() {
+  const mapsConfig = functions.config().maps || {};
+  const readBoolean = (value) => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value > 0;
+    if (typeof value !== "string") return null;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+    if (["1", "true", "yes", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "off"].includes(normalized)) return false;
+    return null;
+  };
+  const envValue = readBoolean(process.env.MAPS_ENABLE_PLACE_PHOTOS);
+  if (envValue !== null) return envValue;
+  const configValue = readBoolean(mapsConfig.enable_place_photos);
+  if (configValue !== null) return configValue;
+  return false;
+}
+
+function buildNearbyCacheKey({
+  latitude,
+  longitude,
+  radiusMeters,
+  localeCode,
+  topClusters,
+}) {
+  const keyPayload = {
+    lat: Number(latitude.toFixed(2)),
+    lng: Number(longitude.toFixed(2)),
+    radiusMeters,
+    localeCode,
+    clusters: Array.isArray(topClusters) ? topClusters : [],
+  };
+  const keyRaw = JSON.stringify(keyPayload);
+  return crypto.createHash("sha1").update(keyRaw).digest("hex");
+}
+
+async function readNearbyProfessionalsCache(cacheKey) {
+  if (!cacheKey) return null;
+  const snap = await admin.firestore()
+      .collection("professional_nearby_cache")
+      .doc(cacheKey)
+      .get();
+  if (!snap.exists) return null;
+  const data = snap.data() || {};
+  const expiresAtMs = Number(data.expiresAtMs || 0);
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+    return null;
+  }
+  const payload = data.payload;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  return payload;
+}
+
+async function writeNearbyProfessionalsCache({
+  cacheKey,
+  payload,
+  ttlMs,
+}) {
+  if (!cacheKey || !payload || typeof payload !== "object") {
+    return;
+  }
+  const safeTtlMs = Math.max(5 * 60 * 1000, Math.min(6 * 60 * 60 * 1000, Number(ttlMs) || 0));
+  const expiresAtMs = Date.now() + safeTtlMs;
+  await admin.firestore()
+      .collection("professional_nearby_cache")
+      .doc(cacheKey)
+      .set({
+        payload,
+        expiresAtMs,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+}
+
+function sanitizeNearbyProfessionalsRequest(body) {
+  const raw = body || {};
+  const latitude = Number(raw.latitude);
+  const longitude = Number(raw.longitude);
+  const hasLatitude = Number.isFinite(latitude);
+  const hasLongitude = Number.isFinite(longitude);
+  const locationQuery = String(raw.locationQuery || "").trim();
+  const hasLocationQuery = Boolean(locationQuery);
+  const radiusMeters = Math.max(
+      1000,
+      Math.min(50000, Number(raw.radiusMeters) || 15000),
+  );
+  const limit = Math.max(1, Math.min(12, Number(raw.limit) || 8));
+  const localeCode = String(raw.localeCode || "en").slice(0, 12);
+  const clutterScore = Number.isFinite(Number(raw.clutterScore)) ?
+    Number(raw.clutterScore) :
+    null;
+  const detectedObjects = Array.isArray(raw.detectedObjects) ?
+    raw.detectedObjects
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean)
+        .slice(0, 60) :
+    [];
+  const labels = Array.isArray(raw.labels) ?
+    raw.labels
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean)
+        .slice(0, 24) :
+    [];
+
+  return {
+    latitude: hasLatitude ? latitude : null,
+    longitude: hasLongitude ? longitude : null,
+    locationQuery: hasLocationQuery ? locationQuery : null,
+    radiusMeters,
+    limit,
+    localeCode,
+    clutterScore,
+    detectedObjects,
+    labels,
+  };
+}
+
+function buildProfessionalIntentSignal({
+  detectedObjects,
+  labels,
+  clutterScore,
+}) {
+  const clusters = [
+    {
+      id: "kitchen",
+      triggers: ["kitchen", "pantry", "plate", "bowl", "cup", "food"],
+      queries: ["kitchen organizer service", "pantry organizer near me"],
+      serviceAreas: ["Kitchen", "Pantry"],
+      specialty: "Kitchen and pantry organization",
+    },
+    {
+      id: "closet",
+      triggers: ["closet", "wardrobe", "clothing", "shirt", "dress", "shoe"],
+      queries: ["closet organizer service", "wardrobe organizer near me"],
+      serviceAreas: ["Closets", "Wardrobes"],
+      specialty: "Closet and wardrobe organization",
+    },
+    {
+      id: "office",
+      triggers: ["desk", "office", "paper", "document", "laptop", "cable"],
+      queries: ["home office organizer", "workspace organizer near me"],
+      serviceAreas: ["Home Office", "Workspaces"],
+      specialty: "Home office and desk organization",
+    },
+    {
+      id: "garage",
+      triggers: ["garage", "tool", "storage", "box", "workshop"],
+      queries: ["garage organizer service", "garage decluttering service"],
+      serviceAreas: ["Garage", "Storage"],
+      specialty: "Garage and storage organization",
+    },
+    {
+      id: "family",
+      triggers: ["toy", "kids", "playroom", "game", "family"],
+      queries: ["playroom organizer", "family space organizer near me"],
+      serviceAreas: ["Playrooms", "Family Areas"],
+      specialty: "Playroom and family space organization",
+    },
+  ];
+
+  const tokenSource = [...detectedObjects, ...labels];
+  const categoryScores = {};
+  for (const cluster of clusters) {
+    categoryScores[cluster.id] = 0;
+  }
+
+  for (const token of tokenSource) {
+    for (const cluster of clusters) {
+      const matched = cluster.triggers.some((term) => token.includes(term));
+      if (matched) {
+        categoryScores[cluster.id] += 1;
+      }
+    }
+  }
+
+  const rankedClusters = clusters
+      .map((cluster) => ({
+        cluster,
+        score: categoryScores[cluster.id] || 0,
+      }))
+      .sort((left, right) => right.score - left.score);
+
+  const topClusters = rankedClusters
+      .filter((entry) => entry.score > 0)
+      .slice(0, 2)
+      .map((entry) => entry.cluster);
+
+  const searchTerms = [
+    "professional organizer",
+    "home organization service",
+  ];
+  for (const cluster of topClusters) {
+    searchTerms.push(...cluster.queries);
+  }
+
+  if (Number.isFinite(clutterScore) && clutterScore >= 70) {
+    searchTerms.push("decluttering service", "junk removal organizer");
+  }
+
+  const uniqueTerms = [];
+  const seenTerms = new Set();
+  for (const term of searchTerms) {
+    const normalized = term.trim().toLowerCase();
+    if (!normalized || seenTerms.has(normalized)) continue;
+    seenTerms.add(normalized);
+    uniqueTerms.push(term);
+  }
+
+  const serviceAreaSet = new Set(["Residential"]);
+  for (const cluster of topClusters) {
+    for (const area of cluster.serviceAreas) {
+      serviceAreaSet.add(area);
+    }
+  }
+
+  return {
+    searchTerms: uniqueTerms.slice(0, 3),
+    topClusters: topClusters.map((entry) => entry.id),
+    specialtyHint: topClusters.length ?
+      topClusters[0].specialty :
+      "Whole-home organization",
+    serviceAreas: Array.from(serviceAreaSet).slice(0, 4),
+  };
+}
+
+function sanitizeHttpUrl(rawUrl) {
+  if (!rawUrl) return null;
+  try {
+    const parsed = new URL(String(rawUrl));
+    if (!["http:", "https:"].includes(parsed.protocol)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function sanitizePhone(rawPhone) {
+  if (!rawPhone) return null;
+  const value = String(rawPhone).trim();
+  if (!value) return null;
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 7) return null;
+  return value;
+}
+
+function buildGoogleMapsPlaceUrl(placeId) {
+  if (!placeId) return null;
+  return `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(placeId)}`;
+}
+
+function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
+  const toRadians = (deg) => (deg * Math.PI) / 180;
+  const earthRadius = 6371000;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(earthRadius * c);
+}
+
+function inferSpecialtyFromTypes(types, fallback) {
+  const joined = Array.isArray(types) ? types.join(" ").toLowerCase() : "";
+  if (joined.includes("moving")) return "Moving and transition organization";
+  if (joined.includes("storage")) return "Storage and space optimization";
+  if (joined.includes("home_goods")) return "Home organization systems";
+  if (joined.includes("furniture_store")) return "Room and storage layout help";
+  return fallback || "Whole-home organization";
+}
+
+function estimateRatePerHour({priceLevel, clutterScore, topClusters}) {
+  let rate = 45;
+  const adjustments = {
+    0: -8,
+    1: -3,
+    2: 3,
+    3: 10,
+    4: 18,
+  };
+  if (Number.isFinite(priceLevel)) {
+    rate += adjustments[priceLevel] || 0;
+  }
+  if (Array.isArray(topClusters) && topClusters.includes("garage")) {
+    rate += 4;
+  }
+  if (Number.isFinite(clutterScore) && clutterScore >= 70) {
+    rate += 6;
+  }
+  return Math.max(30, Math.min(120, Math.round(rate)));
+}
+
+function scoreProfessionalCandidate({
+  details,
+  intent,
+  originLatitude,
+  originLongitude,
+}) {
+  const text = [
+    details.name || "",
+    details.editorial_summary?.overview || "",
+    ...(Array.isArray(details.types) ? details.types : []),
+  ].join(" ").toLowerCase();
+
+  let relevance = 0;
+  if (text.includes("organizer") || text.includes("organization")) {
+    relevance += 10;
+  }
+  if (text.includes("declutter") || text.includes("decluttering")) {
+    relevance += 6;
+  }
+  for (const cluster of intent.topClusters || []) {
+    if (text.includes(cluster)) {
+      relevance += 4;
+    }
+  }
+
+  const rating = Number(details.rating || 0);
+  const reviews = Number(details.user_ratings_total || 0);
+  let trust = rating * 10 + Math.log10(reviews + 1) * 8;
+  const website = sanitizeHttpUrl(details.website);
+  const phone = sanitizePhone(
+      details.formatted_phone_number || details.international_phone_number,
+  );
+  if (website) trust += 3;
+  if (phone) trust += 3;
+  if (details.business_status === "OPERATIONAL") trust += 4;
+
+  const lat = Number(details.geometry?.location?.lat);
+  const lng = Number(details.geometry?.location?.lng);
+  const distanceMeters = Number.isFinite(lat) && Number.isFinite(lng) ?
+    haversineDistanceMeters(originLatitude, originLongitude, lat, lng) :
+    null;
+
+  return {
+    relevance,
+    trust,
+    distanceMeters,
+  };
+}
+
+function passHighTrustFilter(details) {
+  const isOperational = !details.business_status ||
+    details.business_status === "OPERATIONAL";
+  const rating = Number(details.rating || 0);
+  const reviews = Number(details.user_ratings_total || 0);
+  const hasReachableContact = Boolean(
+      sanitizePhone(
+          details.formatted_phone_number || details.international_phone_number,
+      ) ||
+      sanitizeHttpUrl(details.website) ||
+      sanitizeHttpUrl(details.url),
+  );
+  return isOperational && rating >= 4.2 && reviews >= 20 && hasReachableContact;
+}
+
+async function geocodeLocationQuery({apiKey, locationQuery, localeCode}) {
+  const endpoint = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  endpoint.searchParams.set("address", locationQuery);
+  endpoint.searchParams.set("language", localeCode || "en");
+  endpoint.searchParams.set("key", apiKey);
+  const response = await fetch(endpoint.toString());
+  if (!response.ok) {
+    throw new Error(`Geocode failed (${response.status})`);
+  }
+  const json = await response.json();
+  const result = Array.isArray(json.results) ? json.results[0] : null;
+  const lat = Number(result?.geometry?.location?.lat);
+  const lng = Number(result?.geometry?.location?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error("Location query could not be resolved");
+  }
+  return {
+    latitude: lat,
+    longitude: lng,
+    formattedAddress: String(result.formatted_address || locationQuery),
+  };
+}
+
+async function fetchPlacesCandidates({
+  apiKey,
+  latitude,
+  longitude,
+  radiusMeters,
+  localeCode,
+  searchTerms,
+  limit,
+}) {
+  const scoreRawCandidate = (candidate) => {
+    const rating = Number(candidate?.rating || 0);
+    const reviews = Number(candidate?.user_ratings_total || 0);
+    const lat = Number(candidate?.geometry?.location?.lat);
+    const lng = Number(candidate?.geometry?.location?.lng);
+    const distanceMeters = Number.isFinite(lat) && Number.isFinite(lng) ?
+      haversineDistanceMeters(latitude, longitude, lat, lng) :
+      Number.MAX_SAFE_INTEGER;
+    const trustScore = (rating * 10) + (Math.log10(reviews + 1) * 8);
+    const distancePenalty = Math.min(20, (distanceMeters / 1000) * 1.1);
+    return trustScore - distancePenalty;
+  };
+
+  const addResultIfValid = (result, destinationMap) => {
+    const placeId = String(result?.place_id || "");
+    if (!placeId || destinationMap.has(placeId)) return;
+    destinationMap.set(placeId, result);
+  };
+
+  const candidatesById = new Map();
+  const primaryTerm = searchTerms[0] || "professional organizer";
+  const secondaryTerm = searchTerms[1] || `${primaryTerm} near me`;
+  const candidateCap = Math.max(6, Math.min(12, limit + 2));
+
+  const nearbyEndpoint = new URL(
+      "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+  );
+  nearbyEndpoint.searchParams.set("location", `${latitude},${longitude}`);
+  nearbyEndpoint.searchParams.set("radius", String(radiusMeters));
+  nearbyEndpoint.searchParams.set("keyword", primaryTerm);
+  nearbyEndpoint.searchParams.set("language", localeCode || "en");
+  nearbyEndpoint.searchParams.set("key", apiKey);
+
+  const nearbyResponse = await fetch(nearbyEndpoint.toString());
+  if (nearbyResponse.ok) {
+    const nearbyJson = await nearbyResponse.json();
+    const nearbyResults = Array.isArray(nearbyJson.results) ?
+      nearbyJson.results :
+      [];
+    for (const result of nearbyResults.slice(0, 12)) {
+      addResultIfValid(result, candidatesById);
+    }
+  }
+
+  if (candidatesById.size < limit) {
+    const textEndpoint = new URL(
+        "https://maps.googleapis.com/maps/api/place/textsearch/json",
+    );
+    textEndpoint.searchParams.set("query", secondaryTerm);
+    textEndpoint.searchParams.set("location", `${latitude},${longitude}`);
+    textEndpoint.searchParams.set("radius", String(radiusMeters));
+    textEndpoint.searchParams.set("language", localeCode || "en");
+    textEndpoint.searchParams.set("key", apiKey);
+
+    const textResponse = await fetch(textEndpoint.toString());
+    if (textResponse.ok) {
+      const textJson = await textResponse.json();
+      const textResults = Array.isArray(textJson.results) ? textJson.results : [];
+      for (const result of textResults.slice(0, 10)) {
+        addResultIfValid(result, candidatesById);
+      }
+    }
+  }
+
+  return Array.from(candidatesById.values())
+      .map((candidate) => ({candidate, score: scoreRawCandidate(candidate)}))
+      .sort((left, right) => right.score - left.score)
+      .slice(0, candidateCap)
+      .map((entry) => entry.candidate);
+}
+
+async function fetchPlaceDetails({apiKey, placeId, localeCode}) {
+  const endpoint = new URL("https://maps.googleapis.com/maps/api/place/details/json");
+  endpoint.searchParams.set("place_id", placeId);
+  endpoint.searchParams.set(
+      "fields",
+      [
+        "place_id",
+        "name",
+        "formatted_address",
+        "rating",
+        "user_ratings_total",
+        "formatted_phone_number",
+        "international_phone_number",
+        "website",
+        "url",
+        "business_status",
+        "editorial_summary",
+        "types",
+        "price_level",
+        "geometry/location",
+        "photos",
+      ].join(","),
+  );
+  endpoint.searchParams.set("language", localeCode || "en");
+  endpoint.searchParams.set("key", apiKey);
+  const response = await fetch(endpoint.toString());
+  if (!response.ok) return null;
+  const json = await response.json();
+  if (!json || typeof json.result !== "object") return null;
+  return json.result;
+}
+
+function mapDetailsToProfessionalService({
+  details,
+  score,
+  intent,
+  clutterScore,
+  apiKey,
+}) {
+  const placeId = String(details.place_id || "");
+  const includePlacePhotos = shouldIncludePlacePhotoUrls();
+  const photoRef = Array.isArray(details.photos) ?
+    details.photos[0]?.photo_reference :
+    null;
+  const photoUrl = includePlacePhotos && photoRef ?
+    `https://maps.googleapis.com/maps/api/place/photo?maxwidth=240&photo_reference=${encodeURIComponent(photoRef)}&key=${apiKey}` :
+    null;
+  const mapsUrl = sanitizeHttpUrl(details.url) || buildGoogleMapsPlaceUrl(placeId);
+  const website = sanitizeHttpUrl(details.website);
+  const phone = sanitizePhone(
+      details.formatted_phone_number || details.international_phone_number,
+  );
+  const specialty = inferSpecialtyFromTypes(details.types, intent.specialtyHint);
+  const description = String(details.editorial_summary?.overview || "").trim() ||
+    `${details.name} provides ${specialty.toLowerCase()} support for nearby homes and workspaces.`;
+
+  return {
+    id: placeId || String(details.name || ""),
+    placeId: placeId || null,
+    name: String(details.name || "Professional Organizer"),
+    specialty,
+    rating: Number(details.rating || 0),
+    ratePerHour: estimateRatePerHour({
+      priceLevel: Number(details.price_level),
+      clutterScore,
+      topClusters: intent.topClusters,
+    }),
+    phone,
+    email: null,
+    serviceAreas: intent.serviceAreas,
+    description,
+    experienceYears: 5,
+    website,
+    imageUrl: photoUrl,
+    stripeAccountId: null,
+    address: String(details.formatted_address || ""),
+    distanceMeters: score.distanceMeters,
+    mapsUrl,
+    verifiedSource: "google_places",
+    isOperational: !details.business_status ||
+      details.business_status === "OPERATIONAL",
+    userRatingsTotal: Number(details.user_ratings_total || 0),
+  };
+}
+
+async function enrichWithMarketplaceProfiles(services) {
+  const withPlaceId = services.filter((entry) => entry.placeId);
+  if (!withPlaceId.length) return services;
+
+  const refs = withPlaceId.map((entry) =>
+    admin.firestore()
+        .collection("professional_marketplace_profiles")
+        .doc(String(entry.placeId)),
+  );
+  const snapshots = await admin.firestore().getAll(...refs);
+  const profileMap = new Map();
+  for (const snap of snapshots) {
+    if (!snap.exists) continue;
+    profileMap.set(snap.id, snap.data() || {});
+  }
+
+  return services.map((entry) => {
+    const profile = profileMap.get(String(entry.placeId));
+    if (!profile || typeof profile !== "object") return entry;
+    return {
+      ...entry,
+      name: typeof profile.name === "string" ? profile.name : entry.name,
+      specialty: typeof profile.specialty === "string" ?
+        profile.specialty :
+        entry.specialty,
+      description: typeof profile.description === "string" ?
+        profile.description :
+        entry.description,
+      ratePerHour: Number.isFinite(Number(profile.ratePerHour)) ?
+        Number(profile.ratePerHour) :
+        entry.ratePerHour,
+      phone: sanitizePhone(profile.phone) || entry.phone,
+      email: typeof profile.email === "string" ? profile.email : entry.email,
+      website: sanitizeHttpUrl(profile.website) || entry.website,
+      imageUrl: sanitizeHttpUrl(profile.imageUrl) || entry.imageUrl,
+      stripeAccountId: typeof profile.stripeAccountId === "string" ?
+        profile.stripeAccountId :
+        entry.stripeAccountId,
+    };
+  });
 }
 
 /**
@@ -729,20 +2306,33 @@ app.post("/replicate/generate", authenticate, async (req, res) => {
 
 /**
  * POST /gemini/recommend
- * body: { spaceDescription?: string, detectedObjects?: string[], clutterScore?: number }
+ * body: {
+ *   spaceDescription?: string,
+ *   detectedObjects?: string[],
+ *   clutterScore?: number,
+ *   labels?: string[],
+ *   objectDetections?: Array<{name:string, confidence:number, box:{left:number,top:number,width:number,height:number}}>,
+ *   zoneHotspots?: Array<{name:string, objectCount:number, dominantItems:string[]}>,
+ *   imageUrl?: string,
+ *   imageBase64?: string,
+ *   localeCode?: string,
+ *   detailLevel?: string
+ * }
  * Requires authentication
  */
 app.post("/gemini/recommend", authenticate, async (req, res) => {
   try {
-    const geminiApiKey = getGeminiApiKey();
-    if (!geminiApiKey) {
-      return res.status(500).json({error: "GEMINI_API_KEY not configured"});
-    }
-
     const {
       spaceDescription,
       detectedObjects = [],
       clutterScore,
+      labels = [],
+      objectDetections = [],
+      zoneHotspots = [],
+      imageUrl,
+      imageBase64,
+      localeCode,
+      detailLevel,
     } = req.body ?? {};
     const safeObjects = Array.isArray(detectedObjects) ?
       detectedObjects.map((value) => String(value)).filter((value) => value) :
@@ -753,6 +2343,38 @@ app.post("/gemini/recommend", authenticate, async (req, res) => {
       });
     }
 
+    const geminiApiKey = getGeminiApiKey();
+    if (!geminiApiKey) {
+      const context = normalizeRecommendationContext({
+        spaceDescription: spaceDescription ? String(spaceDescription) : null,
+        detectedObjects: safeObjects.slice(0, 50),
+        clutterScore: Number.isFinite(Number(clutterScore)) ?
+          Number(clutterScore) :
+          null,
+        labels: Array.isArray(labels) ? labels.slice(0, 20) : [],
+        objectDetections: Array.isArray(objectDetections) ?
+          objectDetections.slice(0, 100) :
+          [],
+        zoneHotspots: Array.isArray(zoneHotspots) ? zoneHotspots.slice(0, 12) : [],
+        localeCode: localeCode ? String(localeCode) : "en",
+        detailLevel: detailLevel ? String(detailLevel) : "balanced",
+      });
+      functions.logger.warn("Gemini key missing; returning smart fallback plan", {
+        uid: req.user.uid,
+        clutterScore: context.clutterScore,
+        roomType: context.roomType,
+      });
+      const fallback = buildSmartFallbackRecommendation(context);
+      return res.json({
+        data: withRecommendationMeta(fallback, {
+          source: "smart_fallback",
+          qualityPassed: false,
+          model: "smart_fallback_no_key",
+        }),
+        model: "smart_fallback_no_key",
+      });
+    }
+
     const result = await generateGeminiRecommendations({
       apiKey: geminiApiKey,
       spaceDescription: spaceDescription ? String(spaceDescription) : null,
@@ -760,6 +2382,15 @@ app.post("/gemini/recommend", authenticate, async (req, res) => {
       clutterScore: Number.isFinite(Number(clutterScore)) ?
         Number(clutterScore) :
         null,
+      labels: Array.isArray(labels) ? labels.slice(0, 20) : [],
+      objectDetections: Array.isArray(objectDetections) ?
+        objectDetections.slice(0, 100) :
+        [],
+      zoneHotspots: Array.isArray(zoneHotspots) ? zoneHotspots.slice(0, 12) : [],
+      imageUrl: imageUrl ? String(imageUrl) : null,
+      imageBase64: imageBase64 ? String(imageBase64) : null,
+      localeCode: localeCode ? String(localeCode) : "en",
+      detailLevel: detailLevel ? String(detailLevel) : "balanced",
     });
 
     return res.json({
@@ -769,6 +2400,378 @@ app.post("/gemini/recommend", authenticate, async (req, res) => {
   } catch (error) {
     functions.logger.error("Gemini recommendation failed", error);
     return res.status(500).json({error: error.message});
+  }
+});
+
+/**
+ * POST /gemini/scan-title
+ * body: {
+ *   detectedObjects?: string[],
+ *   labels?: string[],
+ *   objectDetections?: Array<{name:string, confidence:number}>,
+ *   imageUrl?: string,
+ *   imageBase64?: string,
+ *   localeCode?: string
+ * }
+ * Requires authentication
+ */
+app.post("/gemini/scan-title", authenticate, async (req, res) => {
+  try {
+    const {
+      detectedObjects = [],
+      labels = [],
+      objectDetections = [],
+      imageUrl,
+      imageBase64,
+      localeCode,
+    } = req.body ?? {};
+
+    const safeObjects = Array.isArray(detectedObjects) ?
+      detectedObjects.map(_normalizeObjectName).filter((value) => value) :
+      [];
+    const detectionNames = Array.isArray(objectDetections) ?
+      objectDetections
+          .map((entry) => entry && typeof entry === "object" ?
+            _normalizeObjectName(entry.name) :
+            "")
+          .filter((value) => value) :
+      [];
+    const mergedObjects = Array.from(
+        new Set([...safeObjects, ...detectionNames]),
+    ).slice(0, 30);
+    const safeLabels = Array.isArray(labels) ?
+      labels.map((value) => String(value).trim()).filter((value) => value).slice(0, 20) :
+      [];
+
+    const hasImage = Boolean(imageBase64 || imageUrl);
+    if (!hasImage && mergedObjects.length === 0 && safeLabels.length === 0) {
+      return res.status(400).json({
+        error: "Provide image context or detected objects/labels",
+      });
+    }
+
+    const geminiApiKey = getGeminiApiKey();
+    if (!geminiApiKey) {
+      const fallbackTitle = buildFallbackScanTitle({
+        detectedObjects: mergedObjects,
+        labels: safeLabels,
+      });
+      functions.logger.warn("Gemini key missing; returning scan title fallback", {
+        uid: req.user.uid,
+      });
+      return res.json({
+        data: {
+          title: fallbackTitle,
+          source: "smart_fallback",
+          model: "smart_fallback_no_key",
+          usedImage: false,
+        },
+      });
+    }
+
+    const result = await generateGeminiScanTitle({
+      apiKey: geminiApiKey,
+      detectedObjects: mergedObjects,
+      labels: safeLabels,
+      imageUrl: imageUrl ? String(imageUrl) : null,
+      imageBase64: imageBase64 ? String(imageBase64) : null,
+      localeCode: localeCode ? String(localeCode) : "en",
+    });
+
+    return res.json({data: result});
+  } catch (error) {
+    functions.logger.error("Gemini scan title failed", error);
+    return res.status(500).json({error: error.message});
+  }
+});
+
+/**
+ * POST /professionals/nearby
+ * body: {
+ *   latitude?: number,
+ *   longitude?: number,
+ *   locationQuery?: string,
+ *   radiusMeters?: number,
+ *   detectedObjects?: string[],
+ *   labels?: string[],
+ *   clutterScore?: number,
+ *   localeCode?: string,
+ *   limit?: number
+ * }
+ * Requires authentication
+ */
+app.post("/professionals/nearby", authenticate, async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const apiKey = getGooglePlacesApiKey();
+    if (!apiKey) {
+      return res.status(500).json({error: "GOOGLE_PLACES_API_KEY not configured"});
+    }
+
+    const input = sanitizeNearbyProfessionalsRequest(req.body);
+    if ((input.latitude == null || input.longitude == null) &&
+        !input.locationQuery) {
+      return res.status(400).json({
+        error: "Provide latitude/longitude or locationQuery",
+      });
+    }
+
+    let latitude = input.latitude;
+    let longitude = input.longitude;
+    let resolvedLocation = null;
+    let locationSource = "gps";
+
+    if ((latitude == null || longitude == null) && input.locationQuery) {
+      const geocodeQuota = await reserveMapsDailyQuota({geocode: 1});
+      if (!geocodeQuota.allowed) {
+        functions.logger.warn("Nearby professionals blocked by geocode quota guard", {
+          uid: req.user.uid,
+          dateKey: geocodeQuota.dateKey,
+        });
+        return res.json({
+          data: {
+            services: [],
+            meta: {
+              source: "google_places",
+              radiusMeters: input.radiusMeters,
+              resolvedLocation: {
+                source: "manual_query",
+                label: input.locationQuery,
+              },
+              reason: "quota_guard_active",
+              quality: {
+                candidateCount: 0,
+                trustedCount: 0,
+                returnedCount: 0,
+              },
+            },
+          },
+        });
+      }
+
+      locationSource = "manual_query";
+      const geocoded = await geocodeLocationQuery({
+        apiKey,
+        locationQuery: input.locationQuery,
+        localeCode: input.localeCode,
+      });
+      latitude = geocoded.latitude;
+      longitude = geocoded.longitude;
+      resolvedLocation = geocoded.formattedAddress;
+    }
+
+    if (latitude == null || longitude == null) {
+      return res.status(400).json({error: "Unable to resolve request location"});
+    }
+
+    const intent = buildProfessionalIntentSignal({
+      detectedObjects: input.detectedObjects,
+      labels: input.labels,
+      clutterScore: input.clutterScore,
+    });
+
+    const roundedLatitude = Number(latitude.toFixed(2));
+    const roundedLongitude = Number(longitude.toFixed(2));
+    const cacheKey = buildNearbyCacheKey({
+      latitude,
+      longitude,
+      radiusMeters: input.radiusMeters,
+      localeCode: input.localeCode,
+      topClusters: intent.topClusters,
+    });
+
+    const cached = await readNearbyProfessionalsCache(cacheKey);
+    if (cached) {
+      const cachedServices = Array.isArray(cached.services) ?
+        cached.services :
+        [];
+      const cachedMeta = cached.meta && typeof cached.meta === "object" ?
+        cached.meta :
+        {};
+      functions.logger.info("Nearby professionals cache hit", {
+        uid: req.user.uid,
+        source: locationSource,
+        latitude: roundedLatitude,
+        longitude: roundedLongitude,
+        returnedCount: cachedServices.length,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return res.json({
+        data: {
+          services: cachedServices,
+          meta: {
+            ...cachedMeta,
+            source: "google_places",
+            radiusMeters: input.radiusMeters,
+            cached: true,
+            resolvedLocation: {
+              source: locationSource,
+              latitude: roundedLatitude,
+              longitude: roundedLongitude,
+              label: resolvedLocation,
+            },
+          },
+        },
+      });
+    }
+
+    const maxDetailsToFetch = Math.max(4, Math.min(6, input.limit + 1));
+    const searchQuota = await reserveMapsDailyQuota({
+      nearby: 1,
+      text: 1,
+      details: maxDetailsToFetch,
+    });
+    if (!searchQuota.allowed) {
+      functions.logger.warn("Nearby professionals blocked by search quota guard", {
+        uid: req.user.uid,
+        dateKey: searchQuota.dateKey,
+      });
+      return res.json({
+        data: {
+          services: [],
+          meta: {
+            source: "google_places",
+            radiusMeters: input.radiusMeters,
+            resolvedLocation: {
+              source: locationSource,
+              latitude: roundedLatitude,
+              longitude: roundedLongitude,
+              label: resolvedLocation,
+            },
+            reason: "quota_guard_active",
+            quality: {
+              candidateCount: 0,
+              trustedCount: 0,
+              returnedCount: 0,
+            },
+          },
+        },
+      });
+    }
+
+    const candidates = await fetchPlacesCandidates({
+      apiKey,
+      latitude,
+      longitude,
+      radiusMeters: input.radiusMeters,
+      localeCode: input.localeCode,
+      searchTerms: intent.searchTerms,
+      limit: input.limit,
+    });
+
+    const detailCandidates = candidates.slice(0, maxDetailsToFetch);
+    const detailResults = await Promise.all(
+        detailCandidates.map(async (candidate) => {
+          const placeId = String(candidate.place_id || "");
+          if (!placeId) return null;
+          const details = await fetchPlaceDetails({
+            apiKey,
+            placeId,
+            localeCode: input.localeCode,
+          });
+          if (!details || !passHighTrustFilter(details)) return null;
+          const score = scoreProfessionalCandidate({
+            details,
+            intent,
+            originLatitude: latitude,
+            originLongitude: longitude,
+          });
+          return {
+            details,
+            score,
+          };
+        }),
+    );
+
+    const trustedDetails = detailResults
+        .filter(Boolean)
+        .sort((left, right) => {
+          if (right.score.relevance !== left.score.relevance) {
+            return right.score.relevance - left.score.relevance;
+          }
+          if (right.score.trust !== left.score.trust) {
+            return right.score.trust - left.score.trust;
+          }
+          const leftDistance = Number.isFinite(left.score.distanceMeters) ?
+            left.score.distanceMeters :
+            Number.MAX_SAFE_INTEGER;
+          const rightDistance = Number.isFinite(right.score.distanceMeters) ?
+            right.score.distanceMeters :
+            Number.MAX_SAFE_INTEGER;
+          if (leftDistance !== rightDistance) {
+            return leftDistance - rightDistance;
+          }
+          return String(left.details.name || "")
+              .localeCompare(String(right.details.name || ""));
+        });
+
+    let services = trustedDetails
+        .slice(0, input.limit)
+        .map((entry) => mapDetailsToProfessionalService({
+          details: entry.details,
+          score: entry.score,
+          intent,
+          clutterScore: input.clutterScore,
+          apiKey,
+        }));
+
+    services = await enrichWithMarketplaceProfiles(services);
+
+    const reason = services.length === 0 ? "no_verified_results" : null;
+    const payload = {
+      services,
+      meta: {
+        source: "google_places",
+        radiusMeters: input.radiusMeters,
+        reason,
+        quality: {
+          candidateCount: candidates.length,
+          trustedCount: trustedDetails.length,
+          returnedCount: services.length,
+        },
+      },
+    };
+
+    await writeNearbyProfessionalsCache({
+      cacheKey,
+      payload,
+      ttlMs: services.length ? 6 * 60 * 60 * 1000 : 20 * 60 * 1000,
+    });
+
+    functions.logger.info("Nearby professionals lookup completed", {
+      uid: req.user.uid,
+      source: locationSource,
+      latitude: roundedLatitude,
+      longitude: roundedLongitude,
+      radiusMeters: input.radiusMeters,
+      candidateCount: candidates.length,
+      trustedCount: trustedDetails.length,
+      returnedCount: services.length,
+      elapsedMs: Date.now() - startedAt,
+    });
+
+    return res.json({
+      data: {
+        services: payload.services,
+        meta: {
+          ...payload.meta,
+          radiusMeters: input.radiusMeters,
+          resolvedLocation: {
+            source: locationSource,
+            latitude: roundedLatitude,
+            longitude: roundedLongitude,
+            label: resolvedLocation,
+          },
+          cached: false,
+        },
+      },
+    });
+  } catch (error) {
+    functions.logger.error("Nearby professionals lookup failed", {
+      message: error?.message || String(error),
+      stack: error?.stack ? String(error.stack).slice(0, 500) : undefined,
+    });
+    return res.status(500).json({error: "Nearby professional lookup failed"});
   }
 });
 
@@ -1657,5 +3660,28 @@ const projectServiceAccount = process.env.GCLOUD_PROJECT ?
 const functionBuilder = projectServiceAccount ?
   functions.runWith({serviceAccount: projectServiceAccount}) :
   functions;
+
+exports._recommendationTesting = {
+  normalizeRecommendationContext,
+  buildGeminiRecommendationPrompt,
+  buildGeminiScanTitlePrompt,
+  evaluateRecommendationQuality,
+  buildSmartFallbackRecommendation,
+  buildFallbackScanTitle,
+  _sanitizeScanTitleCandidate,
+  isSafeImageUrlForGemini,
+  _stepRangeForScore,
+};
+
+exports._professionalSearchTesting = {
+  sanitizeNearbyProfessionalsRequest,
+  buildProfessionalIntentSignal,
+  passHighTrustFilter,
+  estimateRatePerHour,
+  sanitizeHttpUrl,
+  sanitizePhone,
+  normalizeQuotaUnits,
+  buildNearbyCacheKey,
+};
 
 exports.api = functionBuilder.https.onRequest(app);

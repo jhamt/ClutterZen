@@ -8,6 +8,7 @@
   "main": "index.js",
   "scripts": {
     "lint": "eslint .",
+    "test": "node --test",
     "build": "echo \"TypeScript build not configured\"",
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",

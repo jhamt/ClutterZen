@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart' as siwa;
 
 import '../../app_firebase.dart';
@@ -17,6 +18,10 @@ class CreateAccountScreen extends StatefulWidget {
 }
 
 class _CreateAccountScreenState extends State<CreateAccountScreen> {
+  static const String _pendingVerificationPhoneKey =
+      'pending_verification_phone';
+  static const String _pendingVerificationEmailKey =
+      'pending_verification_email';
   final TextEditingController _name = TextEditingController();
   final TextEditingController _email = TextEditingController();
   final TextEditingController _password = TextEditingController();
@@ -30,6 +35,27 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   bool _obscureConfirmPassword = true;
   String _passwordStrength = '';
   Color _passwordStrengthColor = Colors.grey;
+
+  static final RegExp _emailRegex =
+      RegExp(r'^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$', caseSensitive: false);
+  static const Set<String> _allowedEmailDomains = <String>{
+    'gmail.com',
+    'googlemail.com',
+    'outlook.com',
+    'hotmail.com',
+    'live.com',
+    'msn.com',
+    'yahoo.com',
+    'ymail.com',
+    'icloud.com',
+    'me.com',
+    'mac.com',
+    'aol.com',
+    'protonmail.com',
+    'proton.me',
+    'zoho.com',
+    'gmx.com',
+  };
 
   @override
   void initState() {
@@ -203,10 +229,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   if (value == null || value.trim().isEmpty) {
                     return I18nService.translate("Please enter your email");
                   }
-                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                      .hasMatch(value.trim())) {
+                  if (!_isValidEmail(value.trim())) {
                     return I18nService.translate(
                         "Please enter a valid email address");
+                  }
+                  if (!_isSupportedEmailProvider(value.trim())) {
+                    return I18nService.translate(
+                        "Use a supported provider (Gmail, Outlook, Yahoo, iCloud, etc.).");
                   }
                   return null;
                 },
@@ -309,7 +338,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 controller: _phone,
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
-                  labelText: I18nService.translate("Phone Number (Optional)"),
+                  labelText: I18nService.translate("Phone Number"),
                   hintText: I18nService.translate("Enter your phone number"),
                   filled: true,
                   fillColor: const Color(0xFFF2F4F7),
@@ -318,6 +347,17 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     borderSide: BorderSide.none,
                   ),
                 ),
+                validator: (value) {
+                  final normalized = _normalizePhone(value ?? '');
+                  if (normalized.isEmpty) {
+                    return I18nService.translate("Phone number is required");
+                  }
+                  if (!_isValidPhoneE164(normalized)) {
+                    return I18nService.translate(
+                        "Use international format, e.g. +923001234567");
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 24),
               Container(
@@ -469,56 +509,77 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       return;
     }
 
+    final email = _email.text.trim();
+    if (!_isValidEmail(email)) {
+      setState(() {
+        _error = I18nService.translate("Please enter a valid email address");
+      });
+      return;
+    }
+    if (!_isSupportedEmailProvider(email)) {
+      setState(() {
+        _error = I18nService.translate(
+            "Use a supported provider (Gmail, Outlook, Yahoo, iCloud, etc.).");
+      });
+      return;
+    }
+
+    final normalizedPhone = _normalizePhone(_phone.text);
+    if (!_isValidPhoneE164(normalizedPhone)) {
+      setState(() {
+        _error = I18nService.translate(
+            "Use international phone format, e.g. +923001234567");
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      // Check if display name already exists (optional check)
-      final nameQuery = await AppFirebase.firestore
-          .collection('users')
-          .where('displayName', isEqualTo: _name.text.trim())
-          .limit(1)
-          .get();
-
-      if (nameQuery.docs.isNotEmpty) {
-        setState(() {
-          _error = I18nService.translate(
-              "This name is already taken. Please choose a different name.");
-          _loading = false;
-        });
-        return;
-      }
-
       final cred = await AppFirebase.auth.createUserWithEmailAndPassword(
-        email: _email.text.trim(),
+        email: email,
         password: _password.text,
       );
 
-      await cred.user?.updateDisplayName(_name.text.trim());
-
-      // Create user profile doc
-      final userData = {
-        'displayName': _name.text.trim(),
-        'email': _email.text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'scanCredits': 3,
-      };
-
-      // Add phone number if provided
-      if (_phone.text.trim().isNotEmpty) {
-        userData['phoneNumber'] = _phone.text.trim();
-        // Phone number will need to be verified separately through phone auth flow
+      final user = cred.user;
+      if (user == null) {
+        throw FirebaseAuthException(
+          code: 'user-not-found',
+          message: I18nService.translate("Failed to create account"),
+        );
       }
 
-      await AppFirebase.firestore
-          .collection('users')
-          .doc(cred.user!.uid)
-          .set(userData);
+      await user.updateDisplayName(_name.text.trim());
+
+      // Create profile only after auth is established.
+      await UserService.ensureUserProfile(user);
+
+      // Save unverified phone intent and continue to OTP verification flow.
+      await AppFirebase.firestore.collection('users').doc(user.uid).set(
+        {
+          'pendingPhoneNumber': normalizedPhone,
+          'phoneVerified': false,
+        },
+        SetOptions(merge: true),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_pendingVerificationPhoneKey, normalizedPhone);
+      await prefs.setString(_pendingVerificationEmailKey, email);
 
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      Navigator.of(context).pushNamed(
+        '/phone',
+        arguments: <String, dynamic>{
+          'initialPhone': normalizedPhone,
+          'initialEmail': email,
+          'lockPhone': true,
+          'autoSendCode': true,
+          'verificationMode': 'signup',
+        },
+      );
     } on FirebaseAuthException catch (e) {
       String errorMessage = I18nService.translate("Failed to create account");
       if (e.code == 'email-already-in-use') {
@@ -536,7 +597,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       }
       setState(() => _error = errorMessage);
     } catch (e) {
-      setState(() => _error = '${I18nService.translate("Failed")}: $e');
+      final raw = e.toString().toLowerCase();
+      if (raw.contains('permission-denied')) {
+        setState(() {
+          _error = I18nService.translate(
+              "Profile creation is blocked by Firestore rules. Please deploy latest rules and try again.");
+        });
+      } else {
+        setState(() => _error = '${I18nService.translate("Failed")}: $e');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -609,5 +678,38 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           I18nService.translate("Sign-in was canceled or interrupted.");
     }
     return '${I18nService.translate("Failed")}: ${e.message ?? e.code}';
+  }
+
+  bool _isValidEmail(String email) {
+    if (email.isEmpty) return false;
+    if (!_emailRegex.hasMatch(email)) return false;
+    final parts = email.split('@');
+    if (parts.length != 2) return false;
+    final local = parts.first;
+    final domain = parts.last;
+    if (local.startsWith('.') || local.endsWith('.')) return false;
+    if (local.contains('..') || domain.contains('..')) return false;
+    if (domain.startsWith('-') || domain.endsWith('-')) return false;
+    if (!domain.contains('.')) return false;
+    return true;
+  }
+
+  bool _isSupportedEmailProvider(String email) {
+    final atIndex = email.lastIndexOf('@');
+    if (atIndex <= 0 || atIndex == email.length - 1) return false;
+    final domain = email.substring(atIndex + 1).toLowerCase().trim();
+    return _allowedEmailDomains.contains(domain);
+  }
+
+  String _normalizePhone(String input) {
+    final compact = input.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    if (compact.startsWith('00')) {
+      return '+${compact.substring(2)}';
+    }
+    return compact;
+  }
+
+  bool _isValidPhoneE164(String input) {
+    return RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(input);
   }
 }

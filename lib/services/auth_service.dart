@@ -3,7 +3,8 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -126,13 +127,7 @@ class AuthService {
     final rawNonce = _generateNonce();
     final nonce = _sha256ofString(rawNonce);
     try {
-      final credential = await SignInWithApple.getAppleIDCredential(
-        scopes: const [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName
-        ],
-        nonce: nonce,
-      );
+      final credential = await _requestAppleCredential(nonce: nonce);
 
       if (credential.identityToken == null) {
         throw FirebaseAuthException(
@@ -158,6 +153,53 @@ class AuthService {
         message: 'Apple sign-in failed. ${e.message}',
       );
     }
+  }
+
+  Future<AuthorizationCredentialAppleID> _requestAppleCredential({
+    required String nonce,
+  }) {
+    const scopes = <AppleIDAuthorizationScopes>[
+      AppleIDAuthorizationScopes.email,
+      AppleIDAuthorizationScopes.fullName,
+    ];
+
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return SignInWithApple.getAppleIDCredential(
+        scopes: scopes,
+        nonce: nonce,
+      );
+    }
+
+    final clientId = Env.appleServiceId.trim();
+    final redirectRaw = Env.appleRedirectUri.trim();
+    if (clientId.isEmpty || redirectRaw.isEmpty) {
+      throw FirebaseAuthException(
+        code: 'apple-android-config-missing',
+        message:
+            'Apple sign-in on Android requires APPLE_SERVICE_ID and APPLE_REDIRECT_URI.',
+      );
+    }
+
+    final redirectUri = Uri.tryParse(redirectRaw);
+    if (redirectUri == null ||
+        !redirectUri.isAbsolute ||
+        !redirectUri.isScheme('https') ||
+        redirectUri.host.trim().isEmpty) {
+      throw FirebaseAuthException(
+        code: 'apple-android-config-invalid',
+        message:
+            'APPLE_REDIRECT_URI must be a valid https URL for Apple sign-in on Android.',
+      );
+    }
+
+    return SignInWithApple.getAppleIDCredential(
+      scopes: scopes,
+      nonce: nonce,
+      webAuthenticationOptions: WebAuthenticationOptions(
+        clientId: clientId,
+        redirectUri: redirectUri,
+      ),
+    );
   }
 
   Future<void> signOut() async {

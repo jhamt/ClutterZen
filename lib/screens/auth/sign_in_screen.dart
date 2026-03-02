@@ -21,6 +21,8 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _loading = false;
   String? _error;
   bool _appleAvailable = false;
+  static final RegExp _emailRegex =
+      RegExp(r'^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$', caseSensitive: false);
 
   @override
   void initState() {
@@ -294,6 +296,14 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _signInEmail() async {
+    final email = _email.text.trim();
+    if (!_isValidEmail(email)) {
+      setState(() {
+        _error = I18nService.translate("Please enter a valid email address");
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -301,10 +311,10 @@ class _SignInScreenState extends State<SignInScreen> {
     String? errorMessage;
     try {
       final cred = await AppFirebase.auth.signInWithEmailAndPassword(
-        email: _email.text.trim(),
+        email: email,
         password: _password.text,
       );
-      await _handleSignedIn(cred);
+      errorMessage = await _handleSignedIn(cred);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found') {
         errorMessage = I18nService.translate(
@@ -342,7 +352,7 @@ class _SignInScreenState extends State<SignInScreen> {
     String? errorMessage;
     try {
       final cred = await AuthService(AppFirebase.auth).signInWithGoogle();
-      await _handleSignedIn(cred);
+      errorMessage = await _handleSignedIn(cred);
     } on FirebaseAuthException catch (e) {
       errorMessage = _socialAuthErrorMessage(e);
     } catch (e) {
@@ -372,7 +382,7 @@ class _SignInScreenState extends State<SignInScreen> {
         );
       }
       final cred = await AuthService(AppFirebase.auth).signInWithApple();
-      await _handleSignedIn(cred);
+      errorMessage = await _handleSignedIn(cred);
     } on FirebaseAuthException catch (e) {
       errorMessage = _socialAuthErrorMessage(e);
     } catch (e) {
@@ -387,11 +397,36 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  Future<void> _handleSignedIn(UserCredential cred) async {
-    await UserService.ensureUserProfile(cred.user);
+  Future<String?> _handleSignedIn(UserCredential cred) async {
+    final user = cred.user;
+    if (user == null) {
+      return I18nService.translate("Authentication failed.");
+    }
+
+    await user.reload();
+    final refreshedUser = AppFirebase.auth.currentUser ?? user;
+
+    await UserService.ensureUserProfile(refreshedUser);
+    if (_requiresEmailVerification(refreshedUser)) {
+      if (mounted) {
+        Navigator.of(context).pushNamed(
+          '/phone',
+          arguments: <String, dynamic>{
+            'initialPhone': '',
+            'initialEmail': refreshedUser.email ?? '',
+            'lockPhone': false,
+            'autoSendCode': true,
+            'verificationMode': 'signin',
+          },
+        );
+      }
+      return null;
+    }
+
     if (mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     }
+    return null;
   }
 
   String _socialAuthErrorMessage(FirebaseAuthException e) {
@@ -400,6 +435,26 @@ class _SignInScreenState extends State<SignInScreen> {
           I18nService.translate("Sign-in was canceled or interrupted.");
     }
     return '${I18nService.translate("Failed")}: ${e.message ?? e.code}';
+  }
+
+  bool _requiresEmailVerification(User user) {
+    final hasPasswordProvider =
+        user.providerData.any((provider) => provider.providerId == 'password');
+    return hasPasswordProvider && !user.emailVerified;
+  }
+
+  bool _isValidEmail(String email) {
+    if (email.isEmpty) return false;
+    if (!_emailRegex.hasMatch(email)) return false;
+    final parts = email.split('@');
+    if (parts.length != 2) return false;
+    final local = parts.first;
+    final domain = parts.last;
+    if (local.startsWith('.') || local.endsWith('.')) return false;
+    if (local.contains('..') || domain.contains('..')) return false;
+    if (domain.startsWith('-') || domain.endsWith('-')) return false;
+    if (!domain.contains('.')) return false;
+    return true;
   }
 }
 

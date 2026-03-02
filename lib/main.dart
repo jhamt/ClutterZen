@@ -96,6 +96,12 @@ class MyApp extends StatelessWidget {
   final bool _enableAuthGate;
   final String _initialRoute;
 
+  bool _requiresEmailVerification(User user) {
+    final hasPasswordProvider =
+        user.providerData.any((provider) => provider.providerId == 'password');
+    return hasPasswordProvider && !user.emailVerified;
+  }
+
   Widget _buildMaterialApp(String route) {
     return ValueListenableBuilder<Locale>(
       valueListenable: I18nService.localeListenable,
@@ -139,7 +145,9 @@ class MyApp extends StatelessWidget {
         final route = snapshot.connectionState == ConnectionState.waiting
             ? '/splash'
             : snapshot.hasData
-                ? '/home'
+                ? _requiresEmailVerification(snapshot.data!)
+                    ? '/phone'
+                    : '/home'
                 : '/onboarding';
 
         return _buildMaterialApp(route);

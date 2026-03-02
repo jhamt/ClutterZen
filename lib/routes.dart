@@ -72,7 +72,24 @@ class AppRoutes {
     '/forgot-password': (_) => const ForgotPasswordScreen(),
     '/update-profile': (_) => const UpdateProfileScreen(),
     '/update-password': (_) => const UpdatePasswordScreen(),
-    '/phone': (_) => const PhoneOtpScreen(),
+    '/phone': (context) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map) {
+        final initialPhone = args['initialPhone']?.toString();
+        final initialEmail = args['initialEmail']?.toString();
+        final lockPhone = args['lockPhone'] == true;
+        final autoSendCode = args['autoSendCode'] == true;
+        final mode = args['verificationMode']?.toString();
+        return PhoneOtpScreen(
+          initialPhone: initialPhone,
+          initialEmail: initialEmail,
+          lockPhone: lockPhone,
+          autoSendCode: autoSendCode,
+          verificationMode: mode,
+        );
+      }
+      return const PhoneOtpScreen();
+    },
   };
 
   static List<Map<String, String>> allScreens = [

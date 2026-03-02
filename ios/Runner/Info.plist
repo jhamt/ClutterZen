@@ -49,6 +49,8 @@
 	<string>This app uses the camera to capture clutter photos for analysis.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs photo library access to pick images for analysis.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app uses your location to find verified nearby professional organizers.</string>
 	<!-- Google Sign-In URL scheme from GoogleService-Info.plist -->
 	<key>CFBundleURLTypes</key>
 	<array>
